@@ -84,11 +84,10 @@ function pixelMoonSVG() {
   }
   return `<svg class="moonmark" viewBox="0 0 24 24" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
 }
-function matTip(id) {
+function matTip(id) {   // 쓰임새는 알려주지 않는다 — 직접 섞어 보며 알아낼 것
   const m = MATERIALS[id];
-  const role = { metal: '금속 — 주재료(무기) / 형태재료(둔기·갑주)', fabric: '천 — 주재료(방어구)',
-    shape: `형태재료 — ${m.shape ? FORMS[m.shape].name : ''}`, core: `속성재료 — ${m.trait ? TRAITS[m.trait].name : ''}` }[m.cat];
-  return `${m.name} (${m.grade}등급)\n${role}`;
+  const cat = { metal: '금속', fabric: '천', shape: '형태재료', core: '속성재료' }[m.cat] || '재료';
+  return `${m.name} · ${m.grade}등급 ${cat}`;
 }
 // 본 적 있는 재료인가 (가진 적 있거나 지금 가지고 있거나 오늘 들어올 예정)
 function seenMat(id) { return !!((S.seen || {})[id] || S.stock[id] || S.incoming[id]); }
@@ -263,6 +262,7 @@ const UI = {
   },
 
   renderTop() {
+    this.updateNoticeBadge();
     this.$('tbWorkshop').textContent = `${S.workshopName} 공방`;
     this.$('tbOffice').textContent = `${S.officeName} 사무소 · ${S.oGrade}급${S.assoc ? ' · ' + ASSOCIATIONS[S.assoc].name : ''} · 공방 ${workshopClass()}급(Lv.${S.wLevel})`;
     this.$('tbDay').textContent = `${S.day}일차`;
@@ -329,15 +329,21 @@ const UI = {
     if (sub) sub.textContent = filtering ? `${Forge.SLOT_LABEL[Forge.activeSlot]}에 넣을 재료` : '오늘 사용 가능';
     const shown = filtering ? ids.filter(id => Forge.slotAccepts(Forge.activeSlot, id)) : ids;
     if (!shown.length) { el.innerHTML = `<div class="empty">${Forge.SLOT_LABEL[Forge.activeSlot]}에 넣을 재료가 없습니다.</div>`; return; }
-    el.innerHTML = shown.map(id => {
+    const grades = [...new Set(shown.map(id => MATERIALS[id].grade))].sort((a, b) => b - a);   // 등급 높은 순으로 묶는다
+    el.innerHTML = grades.map(gr => `<div class="stockgrp"><div class="sg-h g${gr}">${gr}등급</div><div class="sg-row">${shown.filter(id => MATERIALS[id].grade === gr).map(id => {
       const a = Forge.avail(id);
       return `<button class="matbtn ${a <= 0 || lock ? 'off' : ''}" data-act="pickMat" data-id="${id}" title="${esc(matTip(id))}">${matChip(id, a)}</button>`;
-    }).join('');
+    }).join('')}</div></div>`).join('');
   },
   // 의뢰마다: 그 형태로 보관함에 있는 가장 좋은 수치 (모자라면 얼마나 모자란지 바로 보이게)
   bestOwn(o) {
     const list = S.gear.filter(g => g.form === o.form && !g.contraband);
     return list.length ? Math.max(...list.map(g => g[o.stat])) : null;
+  },
+  // 그 종류를 몇 개 가졌나 · 조건을 채운 것이 있나
+  ownTag(o) {
+    const n = S.gear.filter(g => g.form === o.form && !g.contraband).length, ok = matchGears(o).length;
+    return `<small class="${n === 0 ? 'dim' : ok ? 'good' : 'warn'}">${n}개 보유${n && !ok ? ' · 미달' : ''}</small>`;
   },
   renderForgeOrders() {
     const el = document.getElementById('forgeOrders'); if (!el) return;
@@ -347,7 +353,7 @@ const UI = {
       const F = FORMS[o.form], m = !o.done && matchGear(o), best = this.bestOwn(o);
       return `<div class="forder ${o.done ? 'done' : ''} ${m ? 'ready' : ''}">
         <span class="fo-form"><b>${F.name}</b></span>
-        <span class="fo-req">${o.stat === 'atk' ? '공격' : '방어'} ${o.req}+ <small class="${best == null ? 'dim' : best >= o.req ? 'good' : 'warn'}">${best == null ? '보유 없음' : '보유 ' + best}</small></span>
+        <span class="fo-req">${o.stat === 'atk' ? '공격' : '방어'} ${o.req}+ ${this.ownTag(o)}</span>
         <span class="fo-pay">${fmtMoney(o.money)}</span>
         ${o.done ? '<span class="stamp">완료</span>' : `<button data-act="deliver" data-id="${o.id}" ${m && open ? '' : 'disabled'}>납품</button>`}
       </div>`;
@@ -362,7 +368,7 @@ const UI = {
       const F = FORMS[o.form];
       const m = !o.done && matchGear(o);
       return `<div class="order ${o.done ? 'done' : ''}">
-        <div>${o.rare ? `<span class="ftag" style="--fc:#ffd84a">✦ 드문 손님 · 보상 ${MATERIALS[o.item].name}</span> ` : ''}${o.finger ? `<span class="ftag" style="--fc:${FINGERS[o.finger].color}">✋ ${FINGERS[o.finger].name}</span> ` : ''}<b>${F.name}</b><br><span class="oreq">${o.stat === 'atk' ? '공격력' : '방어력'} ${o.req} 이상${o.trait ? ` · ${TRAITS[o.trait].name} 특성` : ''}</span> ${(() => { const b = this.bestOwn(o); return o.done ? '' : `<small class="${b == null ? 'dim' : b >= o.req ? 'good' : 'warn'}">보관함 ${b == null ? '없음' : '최고 ' + b}</small>`; })()}<br><small class="dim">${o.client}</small></div>
+        <div>${o.rare ? `<span class="ftag" style="--fc:#ffd84a">✦ 드문 손님 · 보상 ${MATERIALS[o.item].name}</span> ` : ''}${o.finger ? `<span class="ftag" style="--fc:${FINGERS[o.finger].color}">✋ ${FINGERS[o.finger].name}</span> ` : ''}<b>${F.name}</b><br><span class="oreq">${o.stat === 'atk' ? '공격력' : '방어력'} ${o.req} 이상${o.trait ? ` · ${TRAITS[o.trait].name} 특성` : ''}</span> ${o.done ? '' : this.ownTag(o)}<br><small class="dim">${o.client}</small></div>
         <div class="oreward">${fmtMoney(o.money)}<br><small>명성 +${o.fame}</small></div>
         ${o.done ? '<span class="stamp">완료</span>' : `<button data-act="deliver" data-id="${o.id}" ${m && open ? '' : 'disabled'} title="${m ? '납품: ' + esc(m.name) + ' +' + m.q : '조건에 맞는 장비가 보관함에 없습니다'}">납품</button>`}
       </div>`;
@@ -454,10 +460,106 @@ const UI = {
         <button class="big" data-act="help">게임 방법</button>
       </div>
       <p class="cloudline" id="cloudLine">${Cloud.label()}</p>
-      <p class="disclaimer">Project Moon의 세계관을 차용한 비공식 팬게임입니다. 등장인물·장비는 창작입니다.<br><small>폰트: 갈무리(Galmuri) · Neo둥근모 — SIL Open Font License</small></p>
+      <p class="disclaimer">v${GAME_VERSION} · Project Moon의 세계관을 차용한 비공식 팬게임입니다. 등장인물·장비는 창작입니다.<br><small>폰트: 갈무리(Galmuri) · Neo둥근모 — SIL Open Font License</small></p>
     </div>`, 'phase');
     this.onTitle = true;
   },
+  // ---------- 납품할 장비 고르기 (같은 종류가 여러 개일 때) ----------
+  showDeliverPick(o, list) {
+    this.showModal(`<h2>납품할 장비 고르기</h2>
+      <p class="dim">${esc(o.client || '의뢰인')} — ${FORMS[o.form].name} · ${o.stat === 'atk' ? '공격' : '방어'} ${o.req} 이상 · 보상 ${fmtMoney(o.money)}</p>
+      <div class="picklist">${list.map(g => gearHTML(g, { cls: 'pickable', attrs: `data-act="deliver" data-id="${o.id}" data-gid="${g.id}"` })).join('')}</div>
+      <button data-act="closeModal">취소</button>`);
+  },
+  // ---------- 구역 정보 (상단 '구역'을 누르면) ----------
+  showDistrictInfo() {
+    if (!S) return;
+    if (S.outskirts) return this.showModal(`<h2>외곽</h2><p>도시의 바깥. 날개도, 머리의 눈도 닿지 않는 곳입니다.</p><p class="dim">이곳에는 둥지의 금기도, 도시세도 없습니다.</p><button data-act="closeModal">닫기</button>`);
+    const D = district(), T = D.taboo, n = S.tabooStrikes || 0;
+    this.showModal(`<h2>${D.name}</h2>
+      <p><b>${D.wing}</b>의 둥지가 다스리는 구역입니다.</p>
+      <p class="dim">${D.desc}</p>
+      <div class="taboo">⚖ 둥지의 금기: <b>${T.name}</b><br><small>${T.desc}</small></div>
+      <p class="${n ? 'bad' : 'dim'}">${n ? `지금까지 위반 ${n}회 — 거듭 어길수록 금기 사냥꾼이 가혹해집니다.` : '아직 금기를 어긴 적이 없습니다.'}</p>
+      <button data-act="closeModal">닫기</button>`);
+  },
+  // ---------- 승급 연출: 건물이 넓어짐 → '승급' 도장 → 새로 생긴 것 ----------
+  showPromotion(kind, lv) {
+    // 단계 0~8 (사무소 9급→1급, 공방 Lv1→5를 같은 축에)
+    const step = kind === 'office' ? 9 - lv : (lv - 1) * 2;
+    const pal = [['#8a5a32', '#c88a4a'], ['#8a5a32', '#c88a4a'], ['#6a6a74', '#c3ced6'], ['#6a6a74', '#c3ced6'], ['#9a7a2a', '#f0c674'], ['#9a7a2a', '#f0c674'], ['#8a2a2a', '#ff6a5a'], ['#5a2a7a', '#d8a0ff'], ['#c8a040', '#fff0b0']][Math.min(8, step)];
+    const title = kind === 'office' ? `사무소 ${lv}급` : `공방 Lv.${lv} — ${WORKSHOP_LEVELS[lv - 1].name}`;
+    const feats = [];
+    if (kind === 'workshop') {
+      feats.push(`망치질이 손에 익는다 — 성공·대성공이 더 잘 난다`, `한 작업물에 두드릴 수 있는 횟수 +1`, `시장에 새 재료가 들어온다`);
+      if (lv === SING_UNLOCK_W) feats.push('특이점 기술 — 날개의 기술을 빌릴 수 있다', 'H사 환 — 새로운 거래 상대');
+      if (lv === 5) feats.push('S급 공방 — 높은 등급의 총기도 허가를 받는다');
+      feats.push(`트레스 협회 등급 ${workshopClass()}급`);
+    } else {
+      feats.push(`사무소 정원 ${maxMembers()}명 · 고용 후보 최대 Lv.${1 + (9 - lv) * 2}`);
+      const z = ZONES.find(z => z.req === lv); if (z) feats.push(`새 출동 지역 — ${z.name}`);
+      if (lv === 8) feats.push('협회 소속이 가능해졌다');
+      if (lv === 1) feats.push('도시가 당신의 이름을 안다');
+    }
+    this.showModal(`<div class="promo" style="--pa:${pal[0]};--pb:${pal[1]}">
+      <canvas id="promoCv" width="320" height="170"></canvas>
+      <div class="promo-stamp">승급</div>
+      <div class="promo-title">${title}</div>
+      <div class="promo-info"><h3>새로 생긴 것</h3><ul>${feats.map(t => `<li>${t}</li>`).join('')}</ul><button class="big gold" data-act="closeModal">확인</button></div>
+    </div>`);
+    const cv = document.getElementById('promoCv'); if (!cv) return;
+    const x = cv.getContext('2d'); x.imageSmoothingEnabled = false;
+    const from = Math.max(0, step - (kind === 'office' ? 1 : 2)), to = step;
+    const dust = []; let t0 = null, stamped = false;
+    const drawBuilding = (k, glow) => {
+      x.clearRect(0, 0, 320, 170);
+      const sky = x.createLinearGradient(0, 0, 0, 170); sky.addColorStop(0, '#120e1a'); sky.addColorStop(1, '#2a2030'); x.fillStyle = sky; x.fillRect(0, 0, 320, 170);
+      for (let i = 0; i < 24; i++) { x.fillStyle = 'rgba(255,230,180,' + (0.2 + 0.3 * ((i * 7) % 5) / 5) + ')'; x.fillRect((i * 53) % 320, (i * 29) % 70, 1, 1); }
+      x.fillStyle = '#1a141c'; x.fillRect(0, 150, 320, 20);
+      const w = 70 + k * 22, floors = 1 + Math.round(k * 0.6), fh = 22, h = floors * fh + 12;
+      const bx = 160 - w / 2, by = 150 - h;
+      x.fillStyle = '#0c0a10'; x.fillRect(bx - 2, by - 2, w + 4, h + 2);
+      x.fillStyle = pal[0]; x.fillRect(bx, by, w, h);
+      x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(bx, by, w, 2);
+      for (let f = 0; f < floors; f++) for (let c = 0; c < Math.floor(w / 18); c++) {
+        const wx = bx + 7 + c * 18, wy = by + 10 + f * fh;
+        x.fillStyle = (c + f) % 3 ? '#ffd27a' : '#3a2a30'; x.fillRect(wx, wy, 8, 10);
+      }
+      x.fillStyle = pal[1]; x.fillRect(bx - 6, by - 6, w + 12, 6);                  // 지붕
+      if (kind === 'workshop') { x.fillStyle = '#3a3a44'; x.fillRect(bx + w - 18, by - 22, 10, 16); x.fillStyle = 'rgba(200,200,210,0.35)'; x.beginPath(); x.arc(bx + w - 13, by - 28, 6, 0, 7); x.fill(); }
+      else { x.fillStyle = pal[1]; x.fillRect(160 - 18, by + h - 16, 36, 16); x.fillStyle = '#0c0a10'; x.fillRect(160 - 16, by + h - 14, 32, 14); }
+      if (glow > 0) { const g = x.createRadialGradient(160, by + h / 2, 10, 160, by + h / 2, 160); g.addColorStop(0, `rgba(255,240,190,${0.35 * glow})`); g.addColorStop(1, 'rgba(255,240,190,0)'); x.fillStyle = g; x.fillRect(0, 0, 320, 170); }
+      for (const d of dust) { x.fillStyle = `rgba(200,180,160,${Math.max(0, d.l)})`; x.fillRect(d.x, d.y, 3, 3); }
+    };
+    const loop = ts => {
+      if (!document.getElementById('promoCv')) return;
+      if (t0 == null) t0 = ts;
+      const t = (ts - t0) / 1000, k = from + (to - from) * Math.min(1, Math.max(0, (t - 0.2) / 1.2));
+      if (t < 1.4 && Math.random() < 0.6) dust.push({ x: 160 + (Math.random() - 0.5) * (90 + k * 22), y: 148, vx: (Math.random() - 0.5) * 40, vy: -Math.random() * 30, l: 1 });
+      for (const d of dust) { d.x += d.vx / 60; d.y += d.vy / 60; d.l -= 0.02; }
+      drawBuilding(k, t > 1.4 ? Math.max(0, 1 - (t - 1.4) / 1.2) : 0);
+      if (t > 1.5 && !stamped) { stamped = true; const p = cv.closest('.promo'); if (p) p.classList.add('stamped'); Sound.great && Sound.great(); }
+      if (t > 2.2) { const p = cv.closest('.promo'); if (p) p.classList.add('info'); }
+      if (t < 4) requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  },
+  // ---------- 공지 (업데이트 내역) — 읽은 버전은 이 브라우저에 기억 ----------
+  noticeSeen() { try { return localStorage.getItem('moonforge_notice_seen') === GAME_VERSION; } catch (e) { return true; } },
+  showNotice() {
+    try { localStorage.setItem('moonforge_notice_seen', GAME_VERSION); } catch (e) {}
+    this.showModal(`<h2>공지 <small class="dim">v${GAME_VERSION}</small></h2>
+      <div class="notices">${(() => { const one = (n, i) => `<div class="notice ${i ? 'old' : ''}"><h3>v${n.v} <small class="dim">${n.date}</small></h3><ul>${n.items.map(t => `<li>${t}</li>`).join('')}</ul></div>`; const recent = NOTICES.slice(0, 3), older = NOTICES.slice(3); return recent.map(one).join('') + (older.length ? `<details class="oldnotices"><summary>이전 공지 ${older.length}개</summary>${older.map(n => one(n, 1)).join('')}</details>` : ''); })()}</div>
+      <button class="big" data-act="closeModal">닫기</button>`);
+    this.updateNoticeBadge();
+  },
+  // ---------- 새 버전 안내: 방해하지 않게 구석에 작게, 누르면 저장 후 새로고침 ----------
+  showUpdateBar(v) {
+    const el = document.getElementById('updateBar'); if (!el) return;
+    el.innerHTML = `<button class="ub-go" data-act="reloadUpdate" title="저장하고 새로고침">✦ 새 버전 v${esc(v)} — 새로고침</button><button class="ub-x" data-act="dismissUpdate" data-v="${esc(v)}" title="닫기">✕</button>`;
+    el.classList.remove('hidden');
+  },
+  updateNoticeBadge() { const b = document.getElementById('noticeBadge'); if (b) b.classList.toggle('hidden', this.noticeSeen()); },
   showNewGame() {
     this.showOverlay(`<div class="card narrow">
       <h2>새 게임</h2>

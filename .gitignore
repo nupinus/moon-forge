@@ -2,7 +2,7 @@
 node_modules/
 dist/
 # 게임에 안 쓰는 원본·실험 자료 (용량이 커서 저장소에서 뺀다)
-assets/pixai/raw/
+assets/pixai/
 assets/tripo/
 assets/tripo_render/
 assets/voxel/

@@ -40,6 +40,19 @@ function traitLevels(b, F, forgeCount, bonus) {
   return tm;
 }
 
+// 단련 1회당 능력치 상승 배율 — 재료 등급이 높을수록 한 번 두드릴 때 더 많이 오른다
+function qMult(g, q) { return 1 + q * (0.065 + 0.01 * ((g || 1) - 1)); }
+// 판매·특허 가치: 능력치 × 희귀도 × 단련·형태 × 특성·특이점
+function gearValue(g) {
+  const F = FORMS[g.form] || {};
+  const base = (g.atk || 0) * 8 + (g.def || 0) * 16 + (g.hp || 0) * 1.2;
+  const tsum = (g.traits || []).reduce((a, t) => a + t.lv, 0);
+  const rar = 1 + 0.2 * (g.rarity || 0);
+  const enh = 1 + 0.02 * (g.q || 0) + 0.08 * (g.tier || 0);
+  const eff = 1 + 0.12 * tsum + (g.singularity ? 0.6 : 0) + (g.ego ? 0.8 : 0) + (g.epithet ? 0.1 : 0);
+  return Math.max(1, Math.round(base * 0.6 * rar * enh * eff * (F.valueMult || 1) * KRW));
+}
+
 // b: 합성재료(blank). b.base 가 있으면 기존 장비를 강화한 것 — id·이명·등급을 이어받는다.
 function makeGear(b) {
   const F = FORMS[b.form], M = MATERIALS[b.main];
@@ -48,7 +61,7 @@ function makeGear(b) {
   let rarity = base0 && base0.rarity != null ? base0.rarity : (b.preRarity != null ? b.preRarity : rollRarity(b));
 
   const R = RARITIES[rarity];
-  const gm = (1 + 0.7 * (g - 1)) * R.mult, qm = 1 + 0.08 * q;
+  const gm = (1 + 0.7 * (g - 1)) * R.mult, qm = qMult(g, q);
   const sg = b.shape ? MATERIALS[b.shape].grade : 0;
   let atk = 0, def = 0, hp = 0;
   if (F.kind === 'weapon') {
@@ -69,7 +82,7 @@ function makeGear(b) {
   if (egoId) tm[EGO[egoId].trait] = Math.min(TRAIT_MAX, (tm[EGO[egoId].trait] || 0) + 3);
   const traits = Object.keys(tm).map(id => ({ id, lv: tm[id] }));
   const tsum = traits.reduce((a, t) => a + t.lv, 0);
-  const value = Math.round(((atk * 8 + def * 16 + hp * 1.2) * (1 + 0.15 * tsum) + q * 3) * (F.valueMult || 1) * (b.singularity || (base0 && base0.singularity) ? 1.6 : 1) * KRW);
+  const value = gearValue({ form: b.form, atk, def, hp, traits, rarity, q, tier: tierOf(q), singularity: base0 ? base0.singularity : b.singularity, ego: base0 ? base0.ego : b.ego, epithet: base0 && base0.epithet });
   // 도시의 금기(총기 규정) — 만들 수는 있지만, 만드는 순간 머리가 반드시 인식한다
   let contraband = base0 && base0.contraband ? base0.contraband : null;
   if (!contraband && F.gun) {
@@ -120,6 +133,15 @@ function migrateGear(g) {
   if (t !== g.tier) { g.tier = t; g.name = `${MATERIALS[g.main].adj} ${FORMS[g.form].tiers[t]}`; }
   return g;
 }
+
+// 단조대 배경 그림 (PixAI) — 없으면 그려 둔 배경. 위치는 그림 속 모루·화로·물통에 맞춘 값.
+const FORGE_LAYOUT = {
+  proc: { fire: [46, 40], embers: [16, 76, 16, 64], water: [34, 160, 19], rest: { x: 246, y: 158 } },
+  img: { AX: 159, AY: 96, fire: [69, 51], embers: [52, 88, 34, 62], water: [41, 151, 14], rest: { x: 266, y: 178 } },
+};
+const forgeBgImg = new Image(); let forgeBgOk = false;
+forgeBgImg.onload = () => { forgeBgOk = true; }; forgeBgImg.src = 'assets/bg/forge.png';
+function forgeBgImage() { return forgeBgOk ? forgeBgImg : null; }
 
 const Forge = {
   slots: { main: null, shape: null, core: null },
@@ -273,6 +295,8 @@ const Forge = {
     const b = this.blank, W = S.wLevel, n = b.strikes, over = Math.max(0, b.effGrade - (W + 1));
     const p = { destroy: 2, damage: 14, keep: 30, success: 44, great: 10 };
     p.success += W * 2.5; p.great += W * 1.2; p.damage -= W * 2; p.keep -= W * 1.5;
+    const mg = ((b.matGrade || 1) + (b.shape ? MATERIALS[b.shape].grade : (b.matGrade || 1))) / 2 - 1;   // 재료 등급(주재료·형태재료 평균)
+    p.great += mg * 1.6; p.success += mg * 1.0; p.damage -= mg * 1.4; p.keep -= mg * 1.2;
     p.destroy += n * 1.3 + over * 4; p.damage += n * 3.2 + over * 6; p.success -= n * 3; p.great -= n * 0.8;
     // 강화 수치가 높을수록 위험 (+30 은 전설)
     const q = b.quality;
@@ -452,7 +476,7 @@ const Forge = {
     if (this.hitFlash) { this.hitFlash.life -= dt; if (this.hitFlash.life <= 0) this.hitFlash = null; }
     this.embers = this.embers || []; this.smoke = this.smoke || []; this.steam = this.steam || [];
     this.emberAcc = (this.emberAcc || 0) + dt * (this.reheatT > 0 ? 45 : 9);
-    while (this.emberAcc > 1) { this.emberAcc--; this.embers.push({ x: rand(16, 76), y: rand(16, 64), vx: rand(-8, 8), vy: rand(-28, -10), life: rand(0.8, 2.2) }); }
+    while (this.emberAcc > 1) { this.emberAcc--; const E = (this.LY || FORGE_LAYOUT.proc).embers; this.embers.push({ x: rand(E[0], E[1]), y: rand(E[2], E[3]), vx: rand(-8, 8), vy: rand(-28, -10), life: rand(0.8, 2.2) }); }
     this.smokeAcc = (this.smokeAcc || 0) + dt * (this.reheatT > 0 ? 3 : 1.2);
     while (this.smokeAcc > 1) { this.smokeAcc--; this.smoke.push({ x: rand(20, 72), y: rand(10, 40), r: rand(4, 8), life: rand(2, 3.5) }); }
     for (const m of this.embers) { m.x += (m.vx + Math.sin(this.t * 3 + m.y) * 6) * dt; m.y += m.vy * dt; m.life -= dt; }
@@ -497,18 +521,28 @@ const Forge = {
     if (this.shake > 0) ctx.translate(Math.round(rand(-this.shake, this.shake)), Math.round(rand(-this.shake, this.shake)));
     const fl = 0.6 + 0.4 * Math.sin(this.t * 9) * Math.sin(this.t * 5.3);
 
-    if (!this.bg) this.buildBg();
-    ctx.drawImage(this.bg, 0, 0);
+    const fimg = forgeBgImage(), LY = fimg ? FORGE_LAYOUT.img : FORGE_LAYOUT.proc;   // 그림 배경(PixAI)이 있으면 그 위치에 맞춘다
+    if (fimg) { ctx.drawImage(fimg, -6, 0, 333, 200); this.AX = LY.AX; this.AY = LY.AY; }
+    else { if (!this.bg) this.buildBg(); ctx.drawImage(this.bg, 0, 0); }
+    this.LY = LY;
     const AX = this.AX, AY = this.AY;
     const inFurnace = this.reheatT > 0;        // 가열 중이면 작업물이 화로 안에
-    this.drawFurnace(ctx, fl, inFurnace);
+    if (!fimg) this.drawFurnace(ctx, fl, inFurnace);
+    else {                                          // 그림 속 화로: 불빛만 일렁이게
+      ctx.globalCompositeOperation = 'lighter';
+      const fg = ctx.createRadialGradient(LY.fire[0], LY.fire[1], 2, LY.fire[0], LY.fire[1], 26 + (inFurnace ? 10 : 0));
+      fg.addColorStop(0, `rgba(255,170,80,${0.25 + 0.15 * fl + (inFurnace ? 0.2 : 0)})`); fg.addColorStop(1, 'rgba(255,90,20,0)');
+      ctx.fillStyle = fg; ctx.fillRect(LY.fire[0] - 40, LY.fire[1] - 40, 80, 80);
+      ctx.globalCompositeOperation = 'source-over';
+    }
     // 담금질 통 물: 화로 불빛이 비치고 잔물결이 인다
-    ctx.save(); ctx.beginPath(); ctx.arc(34, 160, 19, 0, 7); ctx.clip();
-    const wg = ctx.createLinearGradient(15, 141, 53, 179); wg.addColorStop(0, `rgba(255,150,70,${0.18 + 0.08 * fl})`); wg.addColorStop(0.5, 'rgba(30,70,90,0.2)'); wg.addColorStop(1, 'rgba(10,30,40,0)');
-    ctx.fillStyle = wg; ctx.fillRect(15, 141, 38, 38);
-    for (let i = 0; i < 3; i++) { const r = ((this.t * 6 + i * 7) % 20); ctx.strokeStyle = `rgba(170,215,235,${0.25 * (1 - r / 20)})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(30 + i * 3, 158 + i * 2, r, r * 0.6, 0, 0, 7); ctx.stroke(); }
-    ctx.fillStyle = 'rgba(220,240,250,0.35)'; ctx.fillRect(24 + Math.round(Math.sin(this.t * 2) * 3), 152, 7, 1);
-    ctx.restore();
+    { const [wx, wy, wr] = LY.water;                // 담금질 통 물: 화로 불빛이 비치고 잔물결이 인다
+      ctx.save(); ctx.beginPath(); ctx.arc(wx, wy, wr, 0, 7); ctx.clip();
+      const wg = ctx.createLinearGradient(wx - wr, wy - wr, wx + wr, wy + wr); wg.addColorStop(0, `rgba(255,150,70,${0.18 + 0.08 * fl})`); wg.addColorStop(0.5, 'rgba(30,70,90,0.2)'); wg.addColorStop(1, 'rgba(10,30,40,0)');
+      ctx.fillStyle = wg; ctx.fillRect(wx - wr, wy - wr, wr * 2, wr * 2);
+      for (let i = 0; i < 3; i++) { const r = ((this.t * 6 + i * 7) % wr); ctx.strokeStyle = `rgba(170,215,235,${0.25 * (1 - r / wr)})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(wx - 4 + i * 3, wy - 2 + i * 2, r, r * 0.6, 0, 0, 7); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(220,240,250,0.35)'; ctx.fillRect(wx - 10 + Math.round(Math.sin(this.t * 2) * 3), wy - 8, 7, 1);
+      ctx.restore(); }
     // 망치질로 떨어진 쇳비늘
     for (const k of this.flakes || []) { ctx.fillStyle = '#24202a'; ctx.fillRect(Math.round(k.x), Math.round(k.y), k.w + 1, 1); ctx.fillStyle = 'rgba(160,160,180,0.35)'; ctx.fillRect(Math.round(k.x), Math.round(k.y), 1, 1); }
 
@@ -517,8 +551,8 @@ const Forge = {
     if (b && !inFurnace) this.drawWork(ctx, b);
     if (b && inFurnace) {
       ctx.fillStyle = this.heatColor(MATERIALS[b.main].color, this.heat);
-      ctx.fillRect(30, 36, 30, 6);
-      ctx.fillStyle = '#2a2a30'; ctx.fillRect(60, 37, 40, 2); ctx.fillRect(60, 40, 40, 2);   // 집게
+      const [fx, fy] = (this.LY || FORGE_LAYOUT.proc).fire; ctx.fillRect(fx - 16, fy - 3, 30, 6);   // 화로 입구 속 작업물
+      ctx.fillStyle = '#2a2a30'; ctx.fillRect(fx + 14, fy - 2, 40, 2); ctx.fillRect(fx + 14, fy + 1, 40, 2);   // 집게
     }
     if (!b && this.result && !this.result.destroyed) {
       const ic = gearIconCanvas(this.result);
@@ -546,7 +580,7 @@ const Forge = {
     for (const p of this.steam || []) { ctx.fillStyle = `rgba(220,225,235,${Math.min(0.28, p.life * 0.25)})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); }
     // 조명: 화로 · 달군 쇠 · 타격 섬광 (빛은 더해진다)
     ctx.globalCompositeOperation = 'lighter';
-    const gl = ctx.createRadialGradient(46, 40, 6, 46, 40, inFurnace ? 160 : 130);
+    const gl = ctx.createRadialGradient(LY.fire[0], LY.fire[1], 6, LY.fire[0], LY.fire[1], inFurnace ? 160 : 130);
     gl.addColorStop(0, `rgba(255,130,50,${(inFurnace ? 0.3 : 0.2) + 0.07 * fl})`); gl.addColorStop(1, 'rgba(255,110,40,0)');
     ctx.fillStyle = gl; ctx.fillRect(0, 0, W, H);
     if (b && !inFurnace && this.heat > 0.15) {
@@ -1035,7 +1069,7 @@ const Forge = {
 
   // 망치: 위에서 볼 때 들어올리면 크게(카메라에 가까움), 내려치면 작아지며 모루에 닿는다
   drawHammer(ctx) {
-    const rest = { x: 246, y: 158 };
+    const rest = (this.LY || FORGE_LAYOUT.proc).rest;
     const tgt = this.hit || { x: this.AX + 10, y: this.AY };
     let k = 0, lift = 0.35;                 // k: 위치 보간(0=대기,1=타격점), lift: 높이(1=최고)
     if (this.hammerT > 0) {
@@ -1219,7 +1253,7 @@ const Forge = {
   },
   previewStat(fake, q) {
     const F = FORMS[fake.form], g = fake.matGrade;
-    const gm = 1 + 0.7 * (g - 1), qm = 1 + 0.08 * q;
+    const gm = 1 + 0.7 * (g - 1), qm = qMult(g, q);
     const sg = fake.shape ? MATERIALS[fake.shape].grade : 0;
     return { atk: Math.round((F.atk || 0) * gm * qm + sg * 1.5), def: Math.round((F.def || 0) * gm * qm + sg * 0.8), hp: Math.round((F.hp || 0) * gm * qm + sg * 4) };
   },

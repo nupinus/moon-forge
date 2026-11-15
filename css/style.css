@@ -652,3 +652,56 @@ body { word-break: keep-all; overflow-wrap: break-word; }
 body.phoneforge #forgeBody { display: flex; flex-direction: column; }
 body.phoneforge #forgeBody .forgebox { order: -1; margin-bottom: 6px; }
 body.phoneforge .strikelog { height: 54px; }
+
+/* 재료함: 등급별 묶음 */
+#stockGrid:has(.stockgrp) { display: block; }
+.stockgrp { margin-bottom: 4px; }
+.stockgrp .sg-h { font-family: var(--font-small, inherit); font-size: 10px; color: var(--dim); margin: 2px 0 2px; letter-spacing: 1px; }
+.stockgrp .sg-h.g3 { color: #7fd6c8; } .stockgrp .sg-h.g4 { color: #b08aff; } .stockgrp .sg-h.g5 { color: #f0d77a; }
+.stockgrp .sg-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 4px; }
+#view-forge .stockgrp .sg-row { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+@media (max-width: 600px) { #view-forge .stockgrp .sg-row { grid-template-columns: repeat(2, 1fr); } }
+/* 상단 구역: 누르면 정보 */
+.stat.clickable { cursor: pointer; } .stat.clickable:hover b { color: var(--gold2); text-decoration: underline dotted; }
+/* 납품 고르기 */
+.picklist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 60vh; overflow: auto; }
+.picklist .gear { cursor: pointer; } .picklist .gear:hover { outline: 2px solid var(--gold); }
+/* 승급 연출 */
+.promo { position: relative; text-align: center; min-width: min(340px, 86vw); }
+.promo canvas { width: 100%; max-width: 480px; image-rendering: pixelated; border: 2px solid var(--pa); display: block; margin: 0 auto; }
+.promo-title { font-family: var(--font-em, inherit); color: var(--pb); font-size: 18px; margin-top: 8px; opacity: 0; transition: opacity .4s; }
+.promo-stamp { position: absolute; left: 50%; top: 34%; font-family: var(--font-big, inherit); font-size: 56px; color: var(--pb);
+  border: 6px solid var(--pb); padding: 2px 18px; border-radius: 6px; transform: translate(-50%, -50%) rotate(-12deg) scale(3); opacity: 0;
+  text-shadow: 0 0 10px rgba(0,0,0,.6); box-shadow: inset 0 0 0 3px rgba(0,0,0,.25); pointer-events: none; }
+.promo.stamped .promo-stamp { animation: stampIn .35s cubic-bezier(.2,1.6,.4,1) forwards; }
+.promo.stamped { animation: promoShake .3s .25s; }
+.promo.stamped .promo-title { opacity: 1; }
+@keyframes stampIn { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-12deg) scale(3); } 70% { opacity: 1; transform: translate(-50%, -50%) rotate(-12deg) scale(.92); } 100% { opacity: .95; transform: translate(-50%, -50%) rotate(-12deg) scale(1); } }
+@keyframes promoShake { 0%,100% { transform: translate(0,0); } 25% { transform: translate(-4px,2px); } 50% { transform: translate(3px,-3px); } 75% { transform: translate(-2px,1px); } }
+.promo-info { max-height: 0; overflow: hidden; opacity: 0; transition: max-height .5s, opacity .5s; text-align: left; }
+.promo.info .promo-info { max-height: 400px; opacity: 1; margin-top: 8px; }
+.promo-info h3 { color: var(--pb); } .promo-info li { margin: 3px 0; }
+
+/* 공지 버튼: 읽지 않은 공지가 있으면 ! */
+#btnNotice { position: relative; }
+.nbadge { position: absolute; top: -6px; right: -6px; background: var(--red); color: #fff; font-family: var(--font-em, inherit); font-size: 11px; line-height: 15px; width: 15px; height: 15px; border-radius: 50%; text-align: center; box-shadow: 0 0 0 2px var(--bg); animation: nbPulse 1.4s ease-in-out infinite; }
+@keyframes nbPulse { 50% { transform: scale(1.2); } }
+.notices { max-height: 60vh; overflow: auto; margin: 6px 0 10px; }
+.notice { border-left: 3px solid var(--gold); padding: 2px 10px; margin-bottom: 8px; }
+.notice.old { border-left-color: var(--line); opacity: .75; }
+.notice h3 { margin: 4px 0; color: var(--gold2); } .notice li { margin: 2px 0; }
+
+/* 새 버전 안내: 구석에 작게 — 게임을 가리지 않는다 */
+#updateBar { position: fixed; right: 10px; bottom: 74px; z-index: 900; display: flex; gap: 2px; opacity: .92; }
+#updateBar.hidden { display: none; }
+#updateBar button { font-size: 11px; padding: 4px 8px; background: #2a2030; border: 1px solid var(--gold); color: var(--gold2); }
+#updateBar .ub-x { padding: 4px 6px; color: var(--dim); border-color: var(--line); }
+@media (max-width: 600px) { #updateBar { bottom: 70px; right: 6px; } }
+.oldnotices summary { cursor: pointer; color: var(--dim); margin: 4px 0; }
+
+/* 폰: 상단 버튼 6개를 한 줄로 (공지 버튼이 생기며 두 줄로 밀리던 것) */
+@media (max-width: 600px) {
+  #topbar .tb-btns { display: grid !important; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; width: 100%; }
+  #topbar .tb-btns button { padding: 5px 1px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: clip; min-width: 0; }
+  .nbadge { top: -4px; right: -2px; width: 13px; height: 13px; line-height: 13px; font-size: 10px; }
+}

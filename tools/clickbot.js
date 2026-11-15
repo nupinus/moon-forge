@@ -35,6 +35,8 @@ window.ClickBot = {
       const m = this.$('#modal');
       const yes = m.querySelector('[data-act="fingerYes"]'), no = m.querySelector('[data-act="fingerNo"]');
       if (yes) return this.press(Math.random() < 0.6 ? yes : no, '핑거 응답');
+      const pk = m.querySelector('.picklist [data-act="deliver"]'); if (pk) return this.press(pk, '납품할 장비 선택');
+      const nm = m.querySelector('#inGearName'); if (nm) { const b = m.querySelector('button.gold, button[data-act="nameGear"]'); if (b) return this.press(b, '이름 짓기'); }
       const cl = m.querySelector('[data-act="closeModal"]'); if (cl) return this.press(cl, '모달 닫기');
       const any = m.querySelector('button'); if (any) return this.press(any);
       return;

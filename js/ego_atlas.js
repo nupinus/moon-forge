@@ -1,0 +1,3 @@
+// 자동 생성 (tools/pixai_sprites.py) — 환상체 그림 · E.G.O 장비 그림 목록
+const ABNO_ART = ["beauty", "current", "firebird", "forsaken", "judgement", "magicalgirl", "meatlantern", "mountain", "nakednest", "nothing", "oldlady", "onesin", "orchestra", "punishing", "redhood", "redshoes", "scorched", "singing", "snowapple", "snowqueen", "spiderbud", "teddy", "voiddream", "whitenight", "woodsman"];
+const EGO_ATLAS = ["beak", "crimson", "dacapo", "ecstasy", "exuviae", "feather", "frost", "greenstem", "harmony", "horn", "justitia", "lantern", "logging", "lovehate", "match", "mimicry", "paradise", "paw", "penitence", "rapture", "redeyes", "regret", "sanguine", "smile", "solitude"];

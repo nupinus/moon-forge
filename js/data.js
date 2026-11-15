@@ -1,6 +1,14 @@
 'use strict';
 // 화폐 '안'은 한국 원화 기준 가치 (원작에서도 안 ≈ 원). 아래 수치는 천 안 단위로 적고 KRW를 곱한다.
 const KRW = 1000;
+// ---------- 버전 · 공지 (커밋할 때마다 올린다 — 내용은 짧게, 숨은 것은 알려주지 않는다) ----------
+const GAME_VERSION = '1.1';
+const NOTICES = [
+  { v: '1.1', date: '2026-11-16', items: ['장비 그림을 새로 그렸습니다', '단조대가 새 단장을 했습니다', '뒷골목에 새 구역과 출동 지역이 생겼습니다', '재료마다 망치질의 손맛이 다릅니다', '같은 종류 장비는 골라서 납품할 수 있습니다', '승급의 순간을 축하합니다', '하루가 조금 길어졌습니다', '현장에 더 많은 환상체가 나타납니다', '환상체마다 저만의 능력이 있습니다', 'E.G.O 장비가 제 모습을 찾았습니다', '현장과 단조대를 새로 그렸습니다', '상단에 공지 버튼이 생겼습니다', '새 버전이 나오면 구석에서 조용히 알려 드립니다', '구역을 누르면 그곳의 날개와 금기를 볼 수 있습니다', '재료함이 등급별로 정리됩니다', '장비 값이 등급과 솜씨, 깃든 힘에 따라 매겨집니다'] },
+  { v: '1.0', date: '2026-11-15', items: ['첫 공개'] },
+];
+const DAY_SPEED = 3.75;   // 게임 시간: 현실 1초당 몇 분 (배속 ×1)
+const HUNT_YIELD = DAY_SPEED / 5;   // 하루가 길어진 만큼 처치당 보상을 줄여 하루 수확은 그대로
 // ============================================================
 //  문 포지 (Moon Forge) — 데이터 정의
 //  Project Moon 세계관 기반 비공식 팬게임
@@ -491,11 +499,34 @@ const N_COST = 800 * KRW;           // N사 기억 추출·주입 (경험 통조
 Object.assign(MATERIALS, {
   gun_blueprint:   { name: '총기 설계도', grade: 5, cat: 'key', color: '#c9a050', price: 0, unlock: 'gun' },
   prosthetic_part: { name: '의체 부품',   grade: 5, cat: 'key', color: '#9ad0ff', price: 0, unlock: 'aug' },
-  ego_beak:        { name: 'E.G.O 추출물 · 부리', grade: 5, cat: 'ego', color: '#e04a4a', price: 0, unlock: 'ego', ego: 'beak' },
-  ego_penitence:   { name: 'E.G.O 추출물 · 참회', grade: 5, cat: 'ego', color: '#e8e0c0', price: 0, unlock: 'ego', ego: 'penitence' },
-  ego_regret:      { name: 'E.G.O 추출물 · 후회', grade: 5, cat: 'ego', color: '#8a8a9a', price: 0, unlock: 'ego', ego: 'regret' },
+  // E.G.O 추출물 — 환상체(로보토미 코퍼레이션)마다 하나
+  ego_beak: { name: 'E.G.O 추출물 · 부리', grade: 5, cat: 'ego', color: '#e04a4a', price: 0, unlock: 'ego', ego: 'beak' },
+  ego_penitence: { name: 'E.G.O 추출물 · 참회', grade: 5, cat: 'ego', color: '#e8e0c0', price: 0, unlock: 'ego', ego: 'penitence' },
+  ego_regret: { name: 'E.G.O 추출물 · 후회', grade: 5, cat: 'ego', color: '#8a8a9a', price: 0, unlock: 'ego', ego: 'regret' },
+  ego_horn: { name: 'E.G.O 추출물 · 뿔', grade: 5, cat: 'ego', color: '#a0703a', price: 0, unlock: 'ego', ego: 'horn' },
+  ego_redeyes: { name: 'E.G.O 추출물 · 적안', grade: 5, cat: 'ego', color: '#c02030', price: 0, unlock: 'ego', ego: 'redeyes' },
+  ego_lantern: { name: 'E.G.O 추출물 · 초롱', grade: 5, cat: 'ego', color: '#f0d070', price: 0, unlock: 'ego', ego: 'lantern' },
+  ego_ecstasy: { name: 'E.G.O 추출물 · 황홀한 꿈', grade: 5, cat: 'ego', color: '#9a8af0', price: 0, unlock: 'ego', ego: 'ecstasy' },
+  ego_solitude: { name: 'E.G.O 추출물 · 외로움', grade: 5, cat: 'ego', color: '#8a8aa0', price: 0, unlock: 'ego', ego: 'solitude' },
+  ego_match: { name: 'E.G.O 추출물 · 4번째 성냥불', grade: 5, cat: 'ego', color: '#ff7a2a', price: 0, unlock: 'ego', ego: 'match' },
+  ego_logging: { name: 'E.G.O 추출물 · 벌목', grade: 5, cat: 'ego', color: '#c8c0b0', price: 0, unlock: 'ego', ego: 'logging' },
+  ego_frost: { name: 'E.G.O 추출물 · 서리조각', grade: 5, cat: 'ego', color: '#9ad8ff', price: 0, unlock: 'ego', ego: 'frost' },
+  ego_harmony: { name: 'E.G.O 추출물 · 하모니', grade: 5, cat: 'ego', color: '#e8c070', price: 0, unlock: 'ego', ego: 'harmony' },
+  ego_paw: { name: 'E.G.O 추출물 · 곰발바닥', grade: 5, cat: 'ego', color: '#b08a6a', price: 0, unlock: 'ego', ego: 'paw' },
+  ego_sanguine: { name: 'E.G.O 추출물 · 핏빛욕망', grade: 5, cat: 'ego', color: '#e02040', price: 0, unlock: 'ego', ego: 'sanguine' },
+  ego_justitia: { name: 'E.G.O 추출물 · 유스티티아', grade: 5, cat: 'ego', color: '#e8d8a0', price: 0, unlock: 'ego', ego: 'justitia' },
+  ego_crimson: { name: 'E.G.O 추출물 · 붉은 흉터', grade: 5, cat: 'ego', color: '#d02020', price: 0, unlock: 'ego', ego: 'crimson' },
+  ego_lovehate: { name: 'E.G.O 추출물 · 사랑과 증오의 이름으로', grade: 5, cat: 'ego', color: '#ff80c0', price: 0, unlock: 'ego', ego: 'lovehate' },
+  ego_rapture: { name: 'E.G.O 추출물 · 황홀', grade: 5, cat: 'ego', color: '#5a8ab0', price: 0, unlock: 'ego', ego: 'rapture' },
+  ego_greenstem: { name: 'E.G.O 추출물 · 녹색줄기', grade: 5, cat: 'ego', color: '#4aa04a', price: 0, unlock: 'ego', ego: 'greenstem' },
+  ego_exuviae: { name: 'E.G.O 추출물 · 허물', grade: 5, cat: 'ego', color: '#a07a4a', price: 0, unlock: 'ego', ego: 'exuviae' },
+  ego_feather: { name: 'E.G.O 추출물 · 명예로운 깃털', grade: 5, cat: 'ego', color: '#ff9a3a', price: 0, unlock: 'ego', ego: 'feather' },
+  ego_dacapo: { name: 'E.G.O 추출물 · 다카포', grade: 5, cat: 'ego', color: '#e8e8f0', price: 0, unlock: 'ego', ego: 'dacapo' },
+  ego_mimicry: { name: 'E.G.O 추출물 · 미미크리', grade: 5, cat: 'ego', color: '#c84a4a', price: 0, unlock: 'ego', ego: 'mimicry' },
+  ego_smile: { name: 'E.G.O 추출물 · 웃음', grade: 5, cat: 'ego', color: '#8a8a8a', price: 0, unlock: 'ego', ego: 'smile' },
+  ego_paradise: { name: 'E.G.O 추출물 · 실낙원', grade: 5, cat: 'ego', color: '#fff4c0', price: 0, unlock: 'ego', ego: 'paradise' },
 });
-MAT_ORDER.push('gun_blueprint', 'prosthetic_part', 'ego_beak', 'ego_penitence', 'ego_regret');
+MAT_ORDER.push('gun_blueprint', 'prosthetic_part', 'ego_beak', 'ego_penitence', 'ego_regret', 'ego_horn', 'ego_redeyes', 'ego_lantern', 'ego_ecstasy', 'ego_solitude', 'ego_match', 'ego_logging', 'ego_frost', 'ego_harmony', 'ego_paw', 'ego_sanguine', 'ego_justitia', 'ego_crimson', 'ego_lovehate', 'ego_rapture', 'ego_greenstem', 'ego_exuviae', 'ego_feather', 'ego_dacapo', 'ego_mimicry', 'ego_smile', 'ego_paradise');
 
 const RARE_GUESTS = [
   { id: 'period', name: '마침표 사무소 해결사', item: 'gun_blueprint', forms: ['sword', 'spear', 'mace'],
@@ -505,20 +536,66 @@ const RARE_GUESTS = [
 ];
 const RARE_GUEST_CHANCE = 0.006;   // 개점 중 한 시간마다
 
-// 환상체 — 현장에 매우 드물게 나타난다. 처치하면 E.G.O 추출물
+// 환상체 — 현장에 매우 드물게 나타난다. 처치하면 그 환상체의 E.G.O 추출물.
+// 이름·외형·E.G.O 무기 이름은 로보토미 코퍼레이션 원작 기준. 위험 등급이 높을수록 강하고 깊은 지역에만 나온다.
 Object.assign(ENEMIES, {
-  ab_punishing: { name: '징벌새',                    sprite: 'dog',   pal: { d: '#f0f0f0', e: '#e02020' }, hp: 900,  atk: 30, def: 6,  interval: 0.6, range: 18, speed: 70, exp: 120, money: 0, boss: true, scale: 1.2, abno: 'ego_beak' },
-  ab_onesin:    { name: '하나의 죄와 수백 개의 선',   sprite: 'cloak', pal: { m: '#e8e0c0', y: '#2a2a2a' }, hp: 1600, atk: 18, def: 14, interval: 1.4, range: 26, speed: 18, exp: 120, money: 0, boss: true, scale: 1.4, abno: 'ego_penitence' },
-  ab_forsaken:  { name: '버려진 살인마',             sprite: 'human', pal: { h: '#3a3a3a', c: '#6a6a72', p: '#2a2a2a', s: '#c8b0a0' }, hp: 1300, atk: 34, def: 10, interval: 1.2, range: 24, speed: 30, exp: 120, money: 0, weapon: 'pipe', boss: true, scale: 1.4, abno: 'ego_regret' },
+  ab_punishing: { name: '징벌 새', risk: 'TETH', look: '작고 하얀 새 — 붉은 무늬 속에 감춘 부리', sprite: 'bird', pal: { w: '#f4f0ea', m: '#d8d0c8', r: '#e02020', e: '#120e14' }, hp: 1000, atk: 28, def: 7, interval: 0.7, range: 24, speed: 60, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_beak', abnoFame: 10 },
+  ab_onesin: { name: '단 한번의 악과 수백 가지의 선행', risk: 'ZAYIN', look: '가시 왕관을 쓴 채 십자가에 매달린 해골', sprite: 'skull', pal: { w: '#ece4d0', r: '#6a4a2a', e: '#120e14', y: '#8a6a3a' }, hp: 650, atk: 14, def: 5, interval: 1.2, range: 24, speed: 26, exp: 100, money: 0, boss: true, scale: 1.3, abno: 'ego_penitence', abnoFame: 6 },
+  ab_forsaken: { name: '버려진 살인마', risk: 'TETH', look: '구속복에 묶인 남자', sprite: 'human', pal: { h: '#3a3a3a', c: '#e8e4dc', p: '#2a2a2a', s: '#c8b0a0' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, weapon: 'pipe', boss: true, scale: 1.3, abno: 'ego_regret', abnoFame: 10 },
+  ab_beauty: { name: '미녀와 야수', risk: 'TETH', look: '갈색 털에 녹색 눈을 가진 짐승', sprite: 'dog', pal: { d: '#7a5a3a', e: '#6fdc6f' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_horn', abnoFame: 10 },
+  ab_spiderbud: { name: '거미봉오리', risk: 'TETH', look: '눈이 여럿 달린 검은 덩어리, 바닥의 새끼 거미들', sprite: 'blob', pal: { m: '#2a2430', e: '#e02020', r: '#5a2a3a' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_redeyes', abnoFame: 10 },
+  ab_meatlantern: { name: '고기 초롱', risk: 'TETH', look: '하얀 풀밭의 밝은 꽃 — 그 아래 숨은 아귀', sprite: 'flower', pal: { y: '#f8f0a0', g: '#5a8a3a', m: '#7a3a3a', w: '#f0e8d8', r: '#c03030' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_lantern', abnoFame: 10 },
+  ab_voiddream: { name: '공허한 꿈', risk: 'TETH', look: '눈알이 박힌 채 잠든 양', sprite: 'sheep', pal: { w: '#e8e4f0', e: '#6a4ae0', m: '#3a3448' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_ecstasy', abnoFame: 10 },
+  ab_oldlady: { name: '늙은 여인', risk: 'TETH', look: '흔들의자에 앉아 이야기를 들려주던 노파', sprite: 'cloak', pal: { m: '#6a6670', y: '#c8c0b0' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_solitude', abnoFame: 10 },
+  ab_scorched: { name: '불타버린 소녀', risk: 'TETH', look: '온몸이 그을린 성냥팔이 소녀', sprite: 'human', pal: { h: '#2a1a14', c: '#5a2a1a', p: '#2a1a14', s: '#8a5a3a' }, hp: 1000, atk: 28, def: 7, interval: 1.2, range: 24, speed: 26, exp: 125, money: 0, boss: true, scale: 1.3, abno: 'ego_match', abnoFame: 10 },
+  ab_woodsman: { name: '따뜻한 마음의 나무꾼', risk: 'HE', look: '도끼를 든 양철 인간', sprite: 'bot', pal: { m: '#9aa0a8', r: '#e05050' }, hp: 2200, atk: 44, def: 12, interval: 1.2, range: 24, speed: 26, exp: 275, money: 0, weapon: 'sword', boss: true, scale: 1.4, abno: 'ego_logging', abnoFame: 16 },
+  ab_snowqueen: { name: '눈의 여왕', risk: 'HE', look: '몸 없이 떠 있는 푸른 옷과 큰 칼', sprite: 'cloak', pal: { m: '#4a7ab8', y: '#e8f4ff' }, hp: 2200, atk: 44, def: 12, interval: 1.2, range: 24, speed: 26, exp: 275, money: 0, weapon: 'spear', boss: true, scale: 1.4, abno: 'ego_frost', abnoFame: 16 },
+  ab_singing: { name: '노래하는 기계', risk: 'HE', look: '길쭉한 직육면체 기계', sprite: 'box', pal: { m: '#8a7a6a', y: '#f0c060', r: '#c03030' }, hp: 2200, atk: 44, def: 12, interval: 1.2, range: 24, speed: 26, exp: 275, money: 0, boss: true, scale: 1.4, abno: 'ego_harmony', abnoFame: 16 },
+  ab_teddy: { name: '행복한 테디', risk: 'HE', look: '털이 빠지고 눈 하나가 없는 낡은 곰인형', sprite: 'bear', pal: { m: '#a07a5a', w: '#e8d8c0', e: '#120e14' }, hp: 2200, atk: 44, def: 12, interval: 1.2, range: 24, speed: 26, exp: 275, money: 0, boss: true, scale: 1.4, abno: 'ego_paw', abnoFame: 16 },
+  ab_redshoes: { name: '빨간 구두', risk: 'HE', look: '멈추지 않고 춤추는 빨간 구두', sprite: 'human', pal: { h: '#c8a070', c: '#c02020', p: '#e02020', s: '#f0d0c0' }, hp: 2200, atk: 44, def: 12, interval: 1.2, range: 24, speed: 26, exp: 275, money: 0, weapon: 'sword', boss: true, scale: 1.4, abno: 'ego_sanguine', abnoFame: 16 },
+  ab_judgement: { name: '심판 새', risk: 'WAW', look: '붕대를 감고 저울을 든 외눈의 새', sprite: 'bird', pal: { w: '#3a3430', m: '#e8e0d0', r: '#c8a040', e: '#ffd84a' }, hp: 4500, atk: 70, def: 20, interval: 0.7, range: 24, speed: 60, exp: 563, money: 0, boss: true, scale: 1.5, abno: 'ego_justitia', abnoFame: 25 },
+  ab_redhood: { name: '붉은 두건의 용병', risk: 'WAW', look: '붉은 옷과 두건, 이빨 달린 가면의 용병', sprite: 'human', pal: { h: '#c02020', c: '#a01818', p: '#2a1a1a', s: '#e8d0c0' }, hp: 4500, atk: 70, def: 20, interval: 1.2, range: 110, speed: 26, exp: 563, money: 0, weapon: 'gun', ranged: true, boss: true, scale: 1.5, abno: 'ego_crimson', abnoFame: 25 },
+  ab_magicalgirl: { name: '증오의 여왕', risk: 'WAW', look: '애니메이션풍 마법소녀', sprite: 'human', pal: { h: '#f080c0', c: '#f8a0d0', p: '#ffffff', s: '#f8e0d8' }, hp: 4500, atk: 70, def: 20, interval: 1.2, range: 24, speed: 26, exp: 563, money: 0, weapon: 'spear', boss: true, scale: 1.5, abno: 'ego_lovehate', abnoFame: 25 },
+  ab_current: { name: '꿈꾸는 해류', risk: 'WAW', look: '턱이 두 개인 상어, 사람의 다리', sprite: 'shark', pal: { m: '#4a6a8a', w: '#f0f0f0', e: '#ffd84a', p: '#d8b494' }, hp: 4500, atk: 70, def: 20, interval: 1.2, range: 24, speed: 26, exp: 563, money: 0, boss: true, scale: 1.5, abno: 'ego_rapture', abnoFame: 25 },
+  ab_snowapple: { name: '백설공주의 사과', risk: 'WAW', look: '사과 머리에 식물의 몸', sprite: 'plant', pal: { r: '#c02030', g: '#3a7a3a', e: '#120e14' }, hp: 4500, atk: 70, def: 20, interval: 1.2, range: 24, speed: 26, exp: 563, money: 0, boss: true, scale: 1.5, abno: 'ego_greenstem', abnoFame: 25 },
+  ab_nakednest: { name: '벌거벗은 둥지', risk: 'WAW', look: '구멍이 숭숭 난 갈색 덩어리', sprite: 'blob', pal: { m: '#7a5a3a', e: '#2a1a14', r: '#a05a4a' }, hp: 4500, atk: 70, def: 20, interval: 1.2, range: 24, speed: 26, exp: 563, money: 0, boss: true, scale: 1.5, abno: 'ego_exuviae', abnoFame: 25 },
+  ab_firebird: { name: '불새', risk: 'WAW', look: '불에 그을린 새', sprite: 'bird', pal: { w: '#5a3a2a', m: '#ff8a2a', r: '#ffd84a', e: '#ffe070' }, hp: 4500, atk: 70, def: 20, interval: 0.7, range: 24, speed: 60, exp: 563, money: 0, boss: true, scale: 1.5, abno: 'ego_feather', abnoFame: 25 },
+  ab_orchestra: { name: '고요한 오케스트라', risk: 'ALEPH', look: '팔다리 없는 마네킹 지휘자, 음표 모양 옷깃', sprite: 'cloak', pal: { m: '#1a1a22', y: '#f0f0f0' }, hp: 9500, atk: 110, def: 30, interval: 1.2, range: 24, speed: 26, exp: 1188, money: 0, boss: true, scale: 1.7, abno: 'ego_dacapo', abnoFame: 40 },
+  ab_nothing: { name: '아무 것도 없는', risk: 'ALEPH', look: '살갗에 눈과 입이 가득한 기형의 인간형', sprite: 'blob', pal: { m: '#c87a6a', e: '#120e14', r: '#8a2a2a' }, hp: 9500, atk: 110, def: 30, interval: 1.2, range: 24, speed: 26, exp: 1188, money: 0, boss: true, scale: 1.7, abno: 'ego_mimicry', abnoFame: 40 },
+  ab_mountain: { name: '웃는 시체들의 산', risk: 'ALEPH', look: '창백한 가면 얼굴이 박힌 검은 덩어리', sprite: 'blob', pal: { m: '#1a1418', e: '#e8e4dc', r: '#3a2a2a' }, hp: 9500, atk: 110, def: 30, interval: 1.2, range: 24, speed: 26, exp: 1188, money: 0, boss: true, scale: 1.7, abno: 'ego_smile', abnoFame: 40 },
+  ab_whitenight: { name: '백야', risk: 'ALEPH', look: '빛나는 날개와 후광의 존재', sprite: 'cloak', pal: { m: '#f4f0e0', y: '#ffd84a' }, hp: 9500, atk: 110, def: 30, interval: 1.2, range: 24, speed: 26, exp: 1188, money: 0, boss: true, scale: 1.7, abno: 'ego_paradise', abnoFame: 40 },
 });
 const ABNO_CHANCE = 0.005;   // 웨이브마다
-const ABNO_KEYS = ['ab_punishing', 'ab_onesin', 'ab_forsaken'];
+const ABNO_RISK = {"ZAYIN":{"minLv":0,"w":5},"TETH":{"minLv":0,"w":4},"HE":{"minLv":1,"w":3},"WAW":{"minLv":2,"w":2},"ALEPH":{"minLv":3.5,"w":1}};
+const ABNO_KEYS = ['ab_punishing', 'ab_onesin', 'ab_forsaken', 'ab_beauty', 'ab_spiderbud', 'ab_meatlantern', 'ab_voiddream', 'ab_oldlady', 'ab_scorched', 'ab_woodsman', 'ab_snowqueen', 'ab_singing', 'ab_teddy', 'ab_redshoes', 'ab_judgement', 'ab_redhood', 'ab_magicalgirl', 'ab_current', 'ab_snowapple', 'ab_nakednest', 'ab_firebird', 'ab_orchestra', 'ab_nothing', 'ab_mountain', 'ab_whitenight'];
 
-// E.G.O 무기: 해당 추출물로 단조한다
+// E.G.O 무기: 해당 추출물로 단조한다 (특성은 게임 속 해석)
 const EGO = {
-  beak:      { name: '부리', trait: 'bleed',   color: '#e04a4a', desc: '징벌새의 E.G.O — 날카로운 부리가 출혈을 남긴다' },
-  penitence: { name: '참회', trait: 'sinking', color: '#e8e0c0', desc: '하나의 죄와 수백 개의 선의 E.G.O — 무거운 참회가 적을 가라앉힌다' },
-  regret:    { name: '후회', trait: 'tremor',  color: '#8a8a9a', desc: '버려진 살인마의 E.G.O — 휘두를 때마다 후회가 울린다' },
+  beak: { name: '부리', trait: 'bleed', color: '#e04a4a', desc: '징벌 새의 E.G.O' },
+  penitence: { name: '참회', trait: 'sinking', color: '#e8e0c0', desc: '단 한번의 악과 수백 가지의 선행의 E.G.O' },
+  regret: { name: '후회', trait: 'tremor', color: '#8a8a9a', desc: '버려진 살인마의 E.G.O' },
+  horn: { name: '뿔', trait: 'rupture', color: '#a0703a', desc: '미녀와 야수의 E.G.O' },
+  redeyes: { name: '적안', trait: 'bleed', color: '#c02030', desc: '거미봉오리의 E.G.O' },
+  lantern: { name: '초롱', trait: 'tremor', color: '#f0d070', desc: '고기 초롱의 E.G.O' },
+  ecstasy: { name: '황홀한 꿈', trait: 'sinking', color: '#9a8af0', desc: '공허한 꿈의 E.G.O' },
+  solitude: { name: '외로움', trait: 'sinking', color: '#8a8aa0', desc: '늙은 여인의 E.G.O' },
+  match: { name: '4번째 성냥불', trait: 'burn', color: '#ff7a2a', desc: '불타버린 소녀의 E.G.O' },
+  logging: { name: '벌목', trait: 'rupture', color: '#c8c0b0', desc: '따뜻한 마음의 나무꾼의 E.G.O' },
+  frost: { name: '서리조각', trait: 'poise', color: '#9ad8ff', desc: '눈의 여왕의 E.G.O' },
+  harmony: { name: '하모니', trait: 'tremor', color: '#e8c070', desc: '노래하는 기계의 E.G.O' },
+  paw: { name: '곰발바닥', trait: 'tremor', color: '#b08a6a', desc: '행복한 테디의 E.G.O' },
+  sanguine: { name: '핏빛욕망', trait: 'bleed', color: '#e02040', desc: '빨간 구두의 E.G.O' },
+  justitia: { name: '유스티티아', trait: 'poise', color: '#e8d8a0', desc: '심판 새의 E.G.O' },
+  crimson: { name: '붉은 흉터', trait: 'bleed', color: '#d02020', desc: '붉은 두건의 용병의 E.G.O' },
+  lovehate: { name: '사랑과 증오의 이름으로', trait: 'charge', color: '#ff80c0', desc: '증오의 여왕의 E.G.O' },
+  rapture: { name: '황홀', trait: 'sinking', color: '#5a8ab0', desc: '꿈꾸는 해류의 E.G.O' },
+  greenstem: { name: '녹색줄기', trait: 'rupture', color: '#4aa04a', desc: '백설공주의 사과의 E.G.O' },
+  exuviae: { name: '허물', trait: 'rupture', color: '#a07a4a', desc: '벌거벗은 둥지의 E.G.O' },
+  feather: { name: '명예로운 깃털', trait: 'burn', color: '#ff9a3a', desc: '불새의 E.G.O' },
+  dacapo: { name: '다카포', trait: 'tremor', color: '#e8e8f0', desc: '고요한 오케스트라의 E.G.O' },
+  mimicry: { name: '미미크리', trait: 'bleed', color: '#c84a4a', desc: '아무 것도 없는의 E.G.O' },
+  smile: { name: '웃음', trait: 'rupture', color: '#8a8a8a', desc: '웃는 시체들의 산의 E.G.O' },
+  paradise: { name: '실낙원', trait: 'poise', color: '#fff4c0', desc: '백야의 E.G.O' },
 };
 
 // ---------- P사: 차원 장비 ----------

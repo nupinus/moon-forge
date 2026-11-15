@@ -4,6 +4,23 @@
 // ============================================================
 function hash1(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
 
+// 지역 배경 그림: assets/bg/z<번호>.png (도시) · o<번호>.png (외곽). 없으면 그려 둔 실루엣 배경.
+// 환상체 그림: assets/abno/<키>.png — 위험 등급이 높을수록 크게
+const ABNO_ART_H = { ZAYIN: 44, TETH: 48, HE: 56, WAW: 64, ALEPH: 76 };
+const abnoArtCache = {};
+function abnoArt(k) {
+  if (typeof ABNO_ART === 'undefined' || !ABNO_ART.includes(k)) return null;
+  let e = abnoArtCache[k];
+  if (!e) { e = abnoArtCache[k] = { img: new Image(), ok: false }; e.img.onload = () => { e.ok = true; }; e.img.src = 'assets/abno/' + k + '.png'; }
+  return e.ok ? e.img : null;
+}
+const zoneBgCache = {};
+function zoneBgImage(i) {
+  const key = (S && S.outskirts ? 'o' : 'z') + i;
+  let e = zoneBgCache[key];
+  if (!e) { e = zoneBgCache[key] = { img: new Image(), ok: false }; e.img.onload = () => { e.ok = true; }; e.img.src = 'assets/bg/' + key + '.png'; }
+  return e.ok ? e.img : null;
+}
 const Hunt = {
   W: 384, H: 180, G: 150,
   active: false, units: [], enemies: [], floaters: [], tracers: [],
@@ -51,7 +68,7 @@ const Hunt = {
     return { key, d, name: d.name, x, y: this.G - Math.floor(Math.random() * 6),
       hp: Math.round(d.hp * mult * (this.special ? 1 : 1.5)), maxHp: Math.round(d.hp * mult * (this.special ? 1 : 1.5)), atk: d.atk * mult, def: d.def * (0.5 + mult * 0.5),   // 평소 적 체력 1.3배: 세 줄로 함께 싸우는 만큼
       interval: d.interval, range: d.range, speed: d.speed, cd: 0.8 + Math.random(), walk: 0, atkAnim: 0, flash: 0,
-      dead: false, deadT: 0, boss: !!d.boss, scale: d.scale || 1,
+      dead: false, deadT: 0, boss: !!d.boss, scale: d.scale || 1, ab: {},
       st: { bleed: 0, burn: 0, rupture: 0, sinking: 0, stun: 0 }, burnT: 0, sinkT: 0 };
   },
   spawnWave() {
@@ -75,11 +92,15 @@ const Hunt = {
       UI.huntAlert(`${e.name}이(가) 나타났다`, 'bad');
     } else if (this.wave >= 2 && Math.random() < ABNO_CHANCE) {
       // 환상체 출현 (매우 드묾)
-      const key = pick(ABNO_KEYS);
-      const e = this.makeEnemy(key, bx + 10, mult * (1 + zoneLv(this.zone) * 0.9));
+      const lv = S.outskirts ? 4 : zoneLv(this.zone);
+      const pool = ABNO_KEYS.filter(k => lv >= ABNO_RISK[ENEMIES[k].risk].minLv);   // 깊은 곳일수록 위험한 환상체
+      const key = weightedPick(Object.fromEntries(pool.map(k => [k, ABNO_RISK[ENEMIES[k].risk].w])));
+      const e = this.makeEnemy(key, bx + 10, mult);
       this.enemies.push(e);
-      this.announce = { text: `⚠ 환상체 — ${e.name}`, life: 3, color: '#ff4a6a' };
-      UI.huntAlert(`환상체 출현: ${e.name}`, 'bad');
+      if (ABNO_AB[e.d.ab] && ABNO_AB[e.d.ab].spawn) ABNO_AB[e.d.ab].spawn(e, this);
+      this.radioLog(`고유 능력 — ${ABNO_AB[e.d.ab].name}: ${ABNO_AB[e.d.ab].desc}`, 'warn');
+      this.announce = { text: `⚠ 환상체 — ${e.name} (${e.d.risk})`, life: 3, color: '#ff4a6a' };
+      UI.huntAlert(`환상체 출현: ${e.name} (${e.d.risk})`, 'bad');
       addLog(`현장에 환상체 「${e.name}」이(가) 나타났다.`, 'bad');
       this.radioLog(`⚠ 환상체 「${e.name}」 출현!`, 'bad');
     } else if (this.wave >= 2 && this.fingerAmbush(bx, mult)) {
@@ -254,7 +275,10 @@ const Hunt = {
     // 아군
     const rear = Math.min(...alive.map(u => u.x));
     for (const u of alive) {
-      u.atkAnim = Math.max(0, u.atkAnim - dt); u.flash = Math.max(0, u.flash - dt); u.cd -= dt;
+      u.atkAnim = Math.max(0, u.atkAnim - dt); u.flash = Math.max(0, u.flash - dt);
+      if (u.stunT > 0) { u.stunT -= dt; u.moving = false; continue; }          // 환상체에게 묶임·잠·빙결
+      u.cd -= dt * (u.slowT > 0 ? 0.7 : 1); if (u.slowT > 0) u.slowT -= dt;
+      if (u.egoAb && EGO_AB[u.egoAb].tick) EGO_AB[u.egoAb].tick(u, dt, this);
       if (u.transformed > 0) { u.transformed -= dt; if (u.transformed <= 0) { u.transformed = 0; this.refreshUnit(u); this.float(u.x, u.y - 44, '흑수화 해제', '#9a9aa8'); UI.mark('partyStruct'); } }
       else if (u.bw && !u.transformUsed && !this.special && u.hp < u.maxHp * 0.5) this.transform(u);   // 위기에 짐승이 깨어난다
       if (u.bl && u.bl.burn) { u.blT = (u.blT || 0) + dt; if (u.blT >= 1) { u.blT -= 1; this.selfHurt(u, u.maxHp * 0.012 * u.bl.burn, TRAITS.scorch.color); if (u.dead) continue; } }
@@ -266,7 +290,7 @@ const Hunt = {
       const laneOff = u.ranged ? 0 : (u.lane || 0) * 12;   // 줄마다 조금씩 뒤에 서서 대각선 진형
       if (tgt && best <= rng + laneOff + (backRow ? 26 : 0)) {
         u.moving = false;
-        if (u.cd <= 0) { this.unitAttack(u, tgt); u.cd = u.interval; }
+        if (u.cd <= 0) { this.unitAttack(u, tgt); u.cd = u.interval * (u.egoAb && EGO_AB[u.egoAb].speed ? EGO_AB[u.egoAb].speed(u) : 1); }
       } else if (alive.some(o => o !== u && o.lane === u.lane && !o.moving && o.x > u.x && o.x - u.x < 20)) {
         u.moving = false;
       } else if (u.x - rear < 70 || tgt) {
@@ -284,6 +308,7 @@ const Hunt = {
       }
       if (e.st.sinking > 0) { e.sinkT += dt; if (e.sinkT >= 3) { e.sinkT = 0; e.st.sinking--; } }
       if (e.dead) continue;
+      if (e.d.ab && ABNO_AB[e.d.ab].tick) { ABNO_AB[e.d.ab].tick(e, dt, this); if (e.dead) continue; }
       if (e.st.stun > 0) { e.st.stun -= dt; e.moving = false; continue; }
       e.cd -= dt;
       if (e.st.lock > 0) e.st.lock -= dt;
@@ -291,6 +316,7 @@ const Hunt = {
       if (!us.length) break;
       let tgt = null, best = 1e9;
       for (const u of us) { const d = Math.abs(e.x - u.x); if (d < best) { best = d; tgt = u; } }
+      if (e.d.ab && ABNO_AB[e.d.ab].target && best <= e.range) tgt = ABNO_AB[e.d.ab].target(e, us);
       if (best <= e.range) {
         e.moving = false;
         if (e.cd <= 0 && !(e.st.lock > 0)) { this.enemyAttack(e, tgt); e.cd = e.interval; }
@@ -307,6 +333,14 @@ const Hunt = {
     }
   },
 
+  // ---- 환상체·E.G.O 능력 도우미 ----
+  every(e, k, period, dt) { const a = e.ab; a[k] = (a[k] || 0) + dt; if (a[k] >= period) { a[k] = 0; return true; } return false; },
+  foes() { return this.enemies.filter(o => !o.dead); },
+  alive() { return this.units.filter(u => !u.dead); },
+  summon(key, x, n) { for (let i = 0; i < n; i++) this.enemies.push(this.makeEnemy(key, x + i * 18, 1)); },
+  hitUnit(u, d, color) { if (u.dead) return; d = Math.max(1, Math.round(d)); u.hp -= d; u.flash = 0.08; this.float(u.x - 12, u.y - 14, d, color || '#ff6b6b'); if (u.hp <= 0) this.unitFall(u); else this.checkRetreat(u); },
+  beam(x, y, dir, color) { const far = dir < 0 ? this.camX - 20 : this.camX + this.W + 20; this.tracers.push({ x1: x, y1: y, x2: far, y2: y, life: 0.45, c: color, w: 6 }, { x1: x, y1: y, x2: far, y2: y, life: 0.45, c: '#ffffff', w: 2 }); },
+  burst(x, color) { this.tracers.push({ x1: x - 40, y1: this.G - 20, x2: x + 40, y2: this.G - 20, life: 0.3, c: color, w: 4 }); },
   pickWeapon(u, e) {
     const pool = [u.f.weapon].concat(u.f.pack ? (u.f.pack.items || []) : []).filter(Boolean);
     let best = u.f.weapon, bestScore = -1;
@@ -352,6 +386,9 @@ const Hunt = {
     else if (u.ranged) this.tracers.push({ x1: u.x + 14, y1: u.y - 14, x2: e.x, y2: e.y - 12 * e.scale, life: 0.12, c: '#e8dcc0' });   // 활·석궁: 화살
     Sound.tick(shoot ? 'gun' : 'hit');
     if (e.boss && assoc() === 'cinq') dmg *= 1.15;
+    const EA = u.egoAb ? EGO_AB[u.egoAb] : null;
+    if (EA) { u.eg = u.eg || {}; if (EA.hit) dmg *= EA.hit(u, e, this, dmg); if (EA.pierce) dmg += e.def * 0.6; }   // E.G.O: 환상체 능력의 열화판
+    this.lastHitter = u;
     this.hurtEnemy(e, Math.max(1, dmg - e.def * 0.6 * (u.bw === 'hb_mi' ? (u.transformed ? 0.5 : 0.75) : 1)), crit ? '#ffd84a' : '#ffffff', false, crit);   // 흑수 - 미: 방어 절반 무시
     if (u.cleave) {                                                       // 낫·대검: 휩쓸기
       const o = this.enemies.find(x => x !== e && !x.dead && Math.abs(x.x - e.x) < 34);
@@ -404,6 +441,7 @@ const Hunt = {
     e.hp -= dmg; e.flash = 0.08;
     this.float(e.x + rand(-5, 5), e.y - 28 * e.scale, (crit ? '!' : '') + dmg, color, crit);
     if (e.hp <= 0) this.killEnemy(e);
+    else if (!isDot && e.d.ab && ABNO_AB[e.d.ab].hurt) ABNO_AB[e.d.ab].hurt(e, this);
   },
   killEnemy(e) {
     e.dead = true; e.deadT = 0; e.hp = 0;
@@ -414,14 +452,15 @@ const Hunt = {
       return;
     }
     S.stats.kills++; S.report.kills++;
+    { const lu = this.lastHitter; if (lu && !lu.dead && lu.egoAb && EGO_AB[lu.egoAb].kill) EGO_AB[lu.egoAb].kill(lu, e, this); }
     const live = this.units.filter(u => !u.dead);
     for (const u of live) {
       u.f.kills++;
       // 장비 경험치 (무기는 처치 기여, 방어구는 함께 싸운 몫)
-      const gexp = 2 + e.d.exp * 0.25;
+      const gexp = (2 + e.d.exp * 0.25) * HUNT_YIELD;
       gearExpGain(u.curW || u.f.weapon, u.f, gexp);
       gearExpGain(u.f.armor, u.f, gexp * 0.7);
-      const ups = gainExp(u.f, e.d.exp * 0.7 * (1 + this.wave * 0.02));   // 모두 함께 싸우는 만큼 경험치는 조금 덜
+      const ups = gainExp(u.f, e.d.exp * 0.7 * HUNT_YIELD * (1 + this.wave * 0.02));   // 모두 함께 싸우는 만큼 경험치는 조금 덜
       if (ups) {
         this.refreshUnit(u);
         this.float(u.x, u.y - 44, 'LEVEL UP', '#6fdc8c', true);
@@ -432,7 +471,7 @@ const Hunt = {
       }
     }
     if (e.d.money) {
-      const m = Math.round(e.d.money * rand(0.6, 1.3) * (live.some(u => u.colorKey === 'yellow') ? 1.15 : 1));   // 노란 특색
+      const m = Math.round(e.d.money * HUNT_YIELD * rand(0.6, 1.3) * (live.some(u => u.colorKey === 'yellow') ? 1.15 : 1));   // 노란 특색
       S.money += m; S.report.huntMoney += m;
     }
     const z = ZONES[this.zone];
@@ -442,7 +481,7 @@ const Hunt = {
       addIncoming(e.berserkOf.bw, 1);
       addLog(`광폭화한 ${e.berserkOf.name}을(를) 쓰러뜨렸다. 남은 것은 흑수의 재료뿐.`, 'bad');
     }
-    const n = (e.boss ? randInt(3, 4) : (Math.random() < 0.72 ? 1 : 0)) + (assoc() === 'seven' && Math.random() < 0.2 ? 1 : 0);
+    const n = (e.boss ? randInt(2, 3) : (Math.random() < 0.72 * HUNT_YIELD ? 1 : 0)) + (assoc() === 'seven' && Math.random() < 0.2 ? 1 : 0);
     const got = [];
     for (let i = 0; i < n; i++) {
       let id = weightedPick(z.drops);
@@ -453,9 +492,9 @@ const Hunt = {
     if (!e.boss) this.radioLog(`${e.name} 처치${got.length ? ' · ' + got.join(', ') : ''}`);
     if (e.d.abno) {
       addIncoming(e.d.abno, 1);
-      S.fame += 10;
+      S.fame += e.d.abnoFame || 10;
       this.float(e.x, e.y - 70, '✦ ' + MATERIALS[e.d.abno].name, '#ff8ad0', true);
-      addLog(`환상체 「${e.name}」을(를) 제압했다. ${MATERIALS[e.d.abno].name} 획득 · 명성 +10`, 'gold');
+      addLog(`환상체 「${e.name}」(${e.d.risk})을(를) 제압했다. ${MATERIALS[e.d.abno].name} 획득 · 명성 +${e.d.abnoFame || 10}`, 'gold');
     }
     if (e.fingerOf) {
       const F = FINGERS[e.fingerOf];
@@ -472,7 +511,7 @@ const Hunt = {
     if (e.boss) {
       const rid = pick(z.rare);
       addIncoming(rid, 1);
-      const bf = Math.round(z.fame * (assoc() === 'cinq' ? 1.5 : 1));
+      const bf = Math.max(1, Math.round(z.fame * HUNT_YIELD * (assoc() === 'cinq' ? 1.5 : 1)));
       S.fame += bf; S.stats.bosses++; S.report.bossKills++;
       for (const u of live) u.f.bosses = (u.f.bosses || 0) + 1;
       this.float(e.x, e.y - 60, '★ ' + MATERIALS[rid].name, '#ffd84a', true);
@@ -493,7 +532,10 @@ const Hunt = {
     const atk = e.atk * (1 - Math.min(0.6, e.st.sinking * 0.04));
     if (e.d.ranged) this.tracers.push({ x1: e.x - 14, y1: e.y - 13, x2: u.x, y2: u.y - 14, life: 0.07, c: '#ff8a6a' });
     if (u.dodge && Math.random() < u.dodge) { this.float(u.x, u.y - 30, '회피', '#9ad0ff'); return; }   // 정장·망토·잿빛 특색
-    const dmg = Math.round((Math.max(1, Math.round(atk * rand(0.85, 1.15) - u.def * 0.6)) + ((u.bl && u.bl.rupture) ? u.bl.rupture * 3 : 0)) * (e.d.abno ? (u.abnoTaken || 1) : 1));
+    const AB = e.d.ab ? ABNO_AB[e.d.ab] : null;
+    let mul = AB && AB.hit ? AB.hit(e, u, this, atk) : 1;
+    if (!e.d.ab && this.enemies.some(o => !o.dead && o.d.ab && ABNO_AB[o.d.ab].aura)) mul *= 1.25;   // 노래하는 기계의 노래
+    const dmg = Math.round((Math.max(1, Math.round(atk * mul * rand(0.85, 1.15) - (AB && AB.pierce ? 0 : u.def * 0.6))) + ((u.bl && u.bl.rupture) ? u.bl.rupture * 3 : 0)) * (e.d.abno ? (u.abnoTaken || 1) : 1));
     u.hp -= dmg; u.flash = 0.08;
     this.float(u.x - 12, u.y - 14, dmg, '#ff6b6b');   // 받는 피해: 몸통 왼쪽 — 머리 위 이름표·번호와 자리를 나눈다
     const at = u.at;
@@ -528,6 +570,7 @@ const Hunt = {
     else this.checkRetreat(u);
   },
   unitFall(u) {
+    for (const o of this.enemies) if (!o.dead && o.d.ab && ABNO_AB[o.d.ab].fall) ABNO_AB[o.d.ab].fall(o, this);
     if (this.special) {                  // 발톱·조율자에게 쓰러지면 죽는다
       u.dead = true; u.hp = 0;
       fixerDies(u.f); S.report.deaths.push(u.f.name);
@@ -573,6 +616,17 @@ const Hunt = {
     const W = this.W, H = this.H, G = this.G;
     const z = ZONES[this.zone] || ZONES[0];
     ctx.imageSmoothingEnabled = false;
+    const bg = zoneBgImage(this.zone);
+    if (bg) {                                   // 지역 배경 그림 (PixAI) — 느리게 흐르고, 번갈아 뒤집어 이음매 없이
+      const bw = Math.round(bg.width * H / bg.height), px = this.camX * 0.3, t0 = Math.floor(px / bw);
+      for (let t = t0; t <= t0 + Math.ceil(W / bw) + 1; t++) {
+        const x = Math.round(t * bw - px);
+        if (t & 1) { ctx.save(); ctx.translate(x + bw, 0); ctx.scale(-1, 1); ctx.drawImage(bg, 0, 0, bw, H); ctx.restore(); }
+        else ctx.drawImage(bg, x, 0, bw, H);
+      }
+      ctx.fillStyle = 'rgba(8,6,10,0.5)'; ctx.fillRect(0, G - 2, W, H - G + 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, G - 2, W, 2);
+    } else {
     ctx.fillStyle = z.pal.sky; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = shade(z.pal.sky, 0.06); ctx.fillRect(0, 60, W, 40);
     this.layer(ctx, this.camX * 0.15, 44, z.pal.far, 40, 110, 1, z.pal.win, 0.18);
@@ -591,6 +645,7 @@ const Hunt = {
     const off = Math.floor(this.camX) % 32;
     for (let x = -off; x < W; x += 32) ctx.fillRect(x, G + 4, 1, H - G);
     ctx.fillRect(0, G + 14, W, 1);
+    }
 
     const list = [];
     for (const u of this.units) if (!u.dead) list.push(u);
@@ -601,8 +656,8 @@ const Hunt = {
     this.drawLabels(ctx);
 
     for (const t of this.tracers) {
-      ctx.strokeStyle = t.c || '#ffe08a'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(t.x1 - this.camX, t.y1); ctx.lineTo(t.x2 - this.camX, t.y2); ctx.stroke();
+      ctx.strokeStyle = t.c || '#ffe08a'; ctx.lineWidth = t.w || 1; ctx.globalAlpha = t.w ? Math.min(1, t.life * 3) : 1;
+      ctx.beginPath(); ctx.moveTo(t.x1 - this.camX, t.y1); ctx.lineTo(t.x2 - this.camX, t.y2); ctx.stroke(); ctx.globalAlpha = 1;
     }
     ctx.textAlign = 'center';
     // 좁은 화면(폰)에서는 떠오르는 숫자를 키운다 — 실제로 보이는 크기가 약 10px 이상
@@ -730,15 +785,22 @@ const Hunt = {
     ctx.textAlign = 'left';
   },
   drawEnemy(ctx, e) {
-    const s = Math.max(2, Math.round(2 * e.scale));
+    const art = e.d.ab ? abnoArt(e.d.ab) : null;          // 환상체: 크고 자세한 그림 (PixAI)
+    let s = Math.max(2, Math.round(2 * e.scale));
     const spr = SPR[e.d.sprite], rows = spr.idle;
-    const w = rows[0].length * s, h = rows.length * s;
-    const sx = Math.round(e.x - this.camX - w / 2 - (e.atkAnim > 0 ? 2 : 0)), sy = Math.round(e.y - h);
+    let w = rows[0].length * s, h = rows.length * s;
+    if (art) { h = ABNO_ART_H[e.d.risk] || 48; w = Math.round(art.width * h / art.height); }
+    const bob = art && !e.dead ? Math.round(Math.sin(this.t * 3 + e.x) * 1) : 0;
+    const sx = Math.round(e.x - this.camX - w / 2 - (e.atkAnim > 0 ? 3 : 0)), sy = Math.round(e.y - h) + bob;
     if (sx > this.W + 40 || sx + w < -40) return;
     if (e.dead) ctx.globalAlpha = Math.max(0, 1 - e.deadT / 0.7);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(sx + 2, e.y - 1, w - 4, 3);
-    ctx.drawImage(getSprite(e.d.sprite, e.dead ? 'idle' : this.frameOf(e), e.d.pal, s, true, e.flash > 0), sx, sy + (e.dead ? Math.round(e.deadT * 10) : 0));
-    if (spr.hand && e.d.weapon) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(sx + 4, e.y - 1, w - 8, 3);
+    if (art) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(art, sx, sy + (e.dead ? Math.round(e.deadT * 10) : 0), w, h);
+      if (e.flash > 0) { ctx.globalAlpha = 0.6; ctx.filter = 'brightness(3)'; ctx.drawImage(art, sx, sy, w, h); ctx.filter = 'none'; ctx.globalAlpha = 1; }
+    } else ctx.drawImage(getSprite(e.d.sprite, e.dead ? 'idle' : this.frameOf(e), e.d.pal, s, true, e.flash > 0), sx, sy + (e.dead ? Math.round(e.deadT * 10) : 0));
+    if (!art && spr.hand && e.d.weapon) {
       const hx = sx + (rows[0].length - 1 - spr.hand[0]) * s, hy = sy + spr.hand[1] * s;
       drawHeldWeapon(ctx, e.d.weapon, hx, hy, s, '#8a8a92', e.atkAnim > 0 ? 1 : 0, -1);
     }

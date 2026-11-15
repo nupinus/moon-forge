@@ -88,7 +88,7 @@ window.Bot = {
     const dt = 0.05;
     let guard = 0, endT = 0;
     while (S && S.phase === 'open' && guard++ < 40000) {
-      if (!Hunt.special) S.time += dt * 5;
+      if (!Hunt.special) S.time += dt * DAY_SPEED;
       Hunt.update(dt);
       if (!S) return { end: 'gameover' };
       Forge.update(dt, true);

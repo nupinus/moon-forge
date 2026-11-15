@@ -170,6 +170,7 @@ function unitStats(f, wOverride) {
     bw: f.blackwater || null,
     curW: w || null,
     form: w ? w.form : 'fist',
+    egoAb: w && !wBind && w.ego && typeof EGO_AB !== 'undefined' && EGO_AB[w.ego] ? w.ego : null,   // E.G.O 장비의 능력
     wColor: w ? w.color : null,
     stagger: (F && F.stagger ? F.stagger : 0) + (f.blackwater === 'hb_o' ? 0.06 : 0),
     crit: Math.min(0.7, 0.05 + 0.06 * poiseLv + (assoc() === 'shi' ? 0.1 : 0) + 0.005 * ml + (f.blackwater === 'hb_sa' ? 0.1 : 0)),
@@ -229,8 +230,12 @@ function genOrders() {
     S.orders.push({ id: uid(), form, stat, req, money: Math.round(money * bonus * KRW), fame, done: false, client: pick(CLIENTS) });
   }
 }
+// 의뢰 조건을 채우는 장비 전부 (값 싼 순)
+function matchGears(o) {
+  return S.gear.filter(g => !g.contraband && g.form === o.form && g[o.stat] >= o.req && (!o.trait || g.traits.some(t => t.id === o.trait || TRAITS[t.id].strong === o.trait))).sort((a, b) => a.value - b.value);
+}
 function matchGear(o) {
-  return S.gear.filter(g => !g.contraband && g.form === o.form && g[o.stat] >= o.req && (!o.trait || g.traits.some(t => t.id === o.trait || TRAITS[t.id].strong === o.trait))).sort((a, b) => a.value - b.value)[0];
+  return matchGears(o)[0];
 }
 function genCandidates() {
   const maxLv = 1 + (9 - S.oGrade) * 2;

@@ -52,7 +52,7 @@ const Game = {
       const running = S.phase === 'open' && !this.paused && !UI.modalOpen;
       const sdt = running ? dt * S.speed : 0;
       if (running && !Hunt.special) {
-        S.time += sdt * 5;
+        S.time += sdt * DAY_SPEED;
         if (S.time >= 1080) { S.time = 1080; this.closeShop(); }
       }
       Hunt.update(sdt);
@@ -97,6 +97,7 @@ const Game = {
       S.ammo = Math.min(S.ammo || 0, 2);
     }
     if (S.ammo == null) S.ammo = 60;
+    if (S.valueV !== 2) { S.gear.concat(S.fixers.map(f => f.weapon), S.fixers.map(f => f.armor)).filter(Boolean).forEach(g => { g.value = gearValue(g); }); S.valueV = 2; }   // 판매가 기준 변경
     if (S.zoneV !== 2) { if (!S.outskirts) S.zone = [0, 2, 4, 6, 8][S.zone] || 0; S.zoneV = 2; }   // 지역 확장(5→9곳): 옛 번호를 새 번호로
     if (!S.unlocks) S.unlocks = { gun: false, aug: false, ego: false };
     if (!S.claws) S.claws = [];
@@ -479,6 +480,10 @@ const ACT = {
     Game.startDay();
   },
   help() { UI.showHelp(); },
+  notice() { UI.showNotice(); },
+  reloadUpdate() { try { if (S) save(); } catch (e) {} location.reload(); },
+  dismissUpdate(d) { try { sessionStorage.setItem('moonforge_update_dismissed', d.v); } catch (e) {} document.getElementById('updateBar').classList.add('hidden'); },
+  districtInfo() { UI.showDistrictInfo(); },
   closeModal() { UI.hideModal(); UI.confirmKey = null; },
   openShop() { Game.openShop(); },
 
@@ -516,8 +521,12 @@ const ACT = {
     if (S.phase !== 'open') return;
     const o = S.orders.find(x => x.id === Number(d.id));
     if (!o || o.done) return;
-    const g = matchGear(o);
-    if (!g) return UI.toast('조건에 맞는 장비가 없습니다');
+    const list = matchGears(o);
+    if (!list.length) return UI.toast('조건에 맞는 장비가 없습니다');
+    if (list.length > 1 && !d.gid) return UI.showDeliverPick(o, list);   // 여러 개면 고른다
+    const g = d.gid ? list.find(x => String(x.id) === String(d.gid)) : list[0];
+    if (!g) return;
+    UI.hideModal();
     S.gear = S.gear.filter(x => x.id !== g.id);
     o.done = true;
     S.money += o.money; S.fame += o.fame;
@@ -624,7 +633,7 @@ const ACT = {
     S.money -= c.money; S.wLevel++;
     addLog(`공방 승급! 「${WORKSHOP_LEVELS[S.wLevel - 1].name}」 (Lv.${S.wLevel})`, 'gold');
     Sound.finish();
-    save(); UI.renderClose(); UI.mark('forge', 'top'); Game.checkWin();
+    save(); UI.renderClose(); UI.mark('forge', 'top'); UI.showPromotion('workshop', S.wLevel); Game.checkWin();
   },
   upOffice() {
     const c = OFFICE_UP[S.oGrade];
@@ -632,7 +641,7 @@ const ACT = {
     S.money -= c.money; S.oGrade--;
     addLog(`사무소 승급! ${S.oGrade}급 사무소가 되었다.`, 'gold');
     Sound.finish();
-    save(); UI.renderClose(); UI.mark('top'); Game.checkWin();
+    save(); UI.renderClose(); UI.mark('top'); UI.showPromotion('office', S.oGrade); Game.checkWin();
   },
   joinAssoc(d) {
     if (S.oGrade > 8) return UI.toast('협회 소속은 사무소 8급부터 가능합니다');
@@ -817,3 +826,21 @@ const ACT = {
 };
 
 window.addEventListener('DOMContentLoaded', () => Game.init());
+
+// ---------- 새 버전 확인 (5분마다, 서버의 data.js에 적힌 버전과 비교) ----------
+const UpdateCheck = {
+  newer(a, b) { const p = s => String(s).split('.').map(Number); const x = p(a), y = p(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; },
+  async check() {
+    try {
+      const r = await fetch('js/data.js?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const mm = (await r.text()).match(/GAME_VERSION = '([^']+)'/);
+      if (!mm || !this.newer(mm[1], GAME_VERSION)) return;
+      let dis = null; try { dis = sessionStorage.getItem('moonforge_update_dismissed'); } catch (e) {}
+      if (dis === mm[1]) return;                      // 이 버전 안내는 닫았다
+      UI.showUpdateBar(mm[1]);
+    } catch (e) {}
+  },
+  start() { setTimeout(() => this.check(), 20000); setInterval(() => this.check(), 5 * 60 * 1000); },
+};
+UpdateCheck.start();

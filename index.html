@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>문 포지</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css">
-<link rel="stylesheet" href="css/style.css?v=110">
+<link rel="stylesheet" href="css/style.css?v=124">
 </head>
 <body>
 <div id="app">
   <header id="topbar">
     <div class="brand"><b id="tbWorkshop">공방</b><small id="tbOffice"></small></div>
     <div class="tb-stats">
-      <div class="stat"><label>구역</label><b id="tbDistrict">-</b></div>
+      <div class="stat clickable" data-act="districtInfo" title="구역 정보"><label>구역 ⓘ</label><b id="tbDistrict">-</b></div>
       <div class="stat"><label>일차</label><b id="tbDay">-</b></div>
       <div class="stat"><label>시각</label><b id="tbTime">-</b></div>
       <div class="stat"><label>자금</label><b id="tbMoney">-</b></div>
@@ -23,6 +23,7 @@
       <button id="btnPause" data-act="pause" title="일시정지 (P)">❚❚ 정지</button>
       <button id="btnSpeed" data-act="speed" title="게임 속도">배속 ×1</button>
       <button id="btnClose" class="warnbtn" data-act="closeShopBtn">마감하기</button>
+      <button data-act="notice" id="btnNotice" title="업데이트 공지">공지<b class="nbadge hidden" id="noticeBadge">!</b></button>
       <button data-act="help">도움말</button>
       <button data-act="menu">메뉴</button>
     </div>
@@ -85,15 +86,18 @@
   <div id="overlay" class="hidden"></div>
   <div id="modal" class="hidden"></div>
   <div id="toasts"></div>
+  <div id="updateBar" class="hidden"></div>
 </div>
-<script src="js/data.js?v=110"></script>
-<script src="js/gear_atlas.js?v=110"></script>
-<script src="js/sprites.js?v=110"></script>
-<script src="js/state.js?v=110"></script>
-<script src="js/cloud.js?v=110"></script>
-<script src="js/forge.js?v=110"></script>
-<script src="js/hunt.js?v=110"></script>
-<script src="js/ui.js?v=110"></script>
-<script src="js/main.js?v=110"></script>
+<script src="js/data.js?v=124"></script>
+<script src="js/gear_atlas.js?v=124"></script>
+<script src="js/ego_atlas.js?v=124"></script>
+<script src="js/sprites.js?v=124"></script>
+<script src="js/abno.js?v=124"></script>
+<script src="js/state.js?v=124"></script>
+<script src="js/cloud.js?v=124"></script>
+<script src="js/forge.js?v=124"></script>
+<script src="js/hunt.js?v=124"></script>
+<script src="js/ui.js?v=124"></script>
+<script src="js/main.js?v=124"></script>
 </body>
 </html>

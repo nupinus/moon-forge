@@ -70,6 +70,57 @@ const SPR = {
     walkA: B_TOP.concat(['..km....mk..', '.kkk....kkk.']),
     walkB: B_TOP.concat(['....kmmk....', '....kkkk....']),
   },
+  // ---- 환상체 전용 모양 ----
+  bird: {     // 작은 새 (징벌 새 · 불새 · 심판 새)
+    hand: null,
+    idle:  ['....kkk.....', '...kwwwk....', '..kwwewkrr..', '..kwwwwkrk..', '.kwwwwwwk...', 'kwwmwwwwwk..', 'kwmmmwwwwk..', '.kwwwwwwk...', '..kk..kk....', '..k....k....'],
+    walkA: ['....kkk.....', '...kwwwk....', '..kwwewkrr..', 'kkkwwwwkrk..', 'kwmmwwwwk...', '.kwmwwwwwk..', '..kwwwwwwk..', '.kwwwwwwk...', '..kk..kk....', '.k......k...'],
+    walkB: ['....kkk.....', '...kwwwk....', '..kwwewkrr..', '..kwwwwkrk..', '.kwwwwwwkkk.', 'kwwwwwwwmmk.', 'kwwwwwwwmk..', '.kwwwwwwk...', '..kk..kk....', '...k..k.....'],
+  },
+  skull: {    // 떠 있는 가시 왕관 해골과 십자가 (단 한번의 악과 수백 가지의 선행)
+    hand: null,
+    idle:  ['..r.r..r.r..', '.krkrkkrkrk.', '.kwwwwwwwwk.', 'kwwwwwwwwwwk', 'kwkkwwwwkkwk', 'kwkekwwkekwk', 'kwwwwkkwwwwk', '.kwwwwwwwwk.', '..kwkwkwkk..', '...kwkwkw...', '.....kk.....', '...kkyykk...', '.....yy.....', '.....yy.....'],
+    walkA: null, walkB: null,
+  },
+  blob: {     // 눈과 입이 박힌 덩어리 (거미봉오리 · 벌거벗은 둥지 · 웃는 시체들의 산 · 아무 것도 없는)
+    hand: null,
+    idle:  ['....kkkkk.....', '..kkmmmmmkk...', '.kmmememmmmk..', 'kmmmmmmmmemmk.', 'kmemmmrrrmmmk.', 'kmmmmmrrrmmemk', 'kmmmmmmmmmmmk.', '.kmmemmmmemmk.', '.kmmmmmmmmmmk.', 'kkmmkkmmkkmmk.'],
+    walkA: ['.....kkkk.....', '..kkkmmmmkk...', '.kmmmemmmmmk..', 'kmmemmmmmmemk.', 'kmmmmmrrrmmmk.', 'kmemmmrrrmmmk.', 'kmmmmmmmmmemk.', '.kmmmmemmmmk..', 'kkmmmmmmmmmkk.', 'kmmkkmmkkmmk..'],
+    walkB: null,
+  },
+  flower: {   // 밝은 꽃 아래 숨은 아귀 (고기 초롱)
+    hand: null,
+    idle:  ['....kyyk....', '...kyyyyk...', '....kyyk....', '.....kk.....', '.....gk.....', '.....gk.....', '..kkkgkkk...', '.kmmmmmmmk..', 'kmwkwkwkwmk.', 'kmmmmmmmmmk.', '.kmrmrmrmk..', '..kkkkkkk...'],
+    walkA: null, walkB: null,
+  },
+  sheep: {    // 눈알 박힌 잠든 양 (공허한 꿈)
+    hand: null,
+    idle:  ['...kkkk.....', '..kwwwwk.kk.', '.kwwewwwkwwk', 'kwwwwwwwwwek', 'kwewwwwwwwwk', 'kwwwwwewwwk.', '.kwwwwwwwwk.', '..kmk..kmk..', '..kk....kk..'],
+    walkA: ['...kkkk.....', '..kwwwwk.kk.', '.kwwewwwkwwk', 'kwwwwwwwwwek', 'kwewwwwwwwwk', 'kwwwwwewwwk.', '.kwwwwwwwwk.', '.kmk....kmk.', '.kk......kk.'],
+    walkB: null,
+  },
+  bear: {     // 낡은 곰인형 (행복한 테디)
+    hand: null,
+    idle:  ['.kk....kk.', 'kmmk..kmmk', '.kmmmmmmk.', 'kmkmmmmemk', 'kmmmwwmmmk', '.kmmkkmmk.', 'kmmmmmmmmk', 'kmwwwwwwmk', 'kmmmmmmmmk', '.kmk..kmk.', '.kk....kk.'],
+    walkA: ['.kk....kk.', 'kmmk..kmmk', '.kmmmmmmk.', 'kmkmmmmemk', 'kmmmwwmmmk', '.kmmkkmmk.', 'kmmmmmmmmk', 'kmwwwwwwmk', 'kmmmmmmmmk', 'kmk....kmk', 'kk......kk'],
+    walkB: null,
+  },
+  box: {      // 길쭉한 기계 (노래하는 기계)
+    hand: null,
+    idle:  ['.kkkkkkkk.', 'kmmmmmmmmk', 'kmyyyyyymk', 'kmmmmmmmmk', 'kmkkkkkkmk', 'kmkrrrrkmk', 'kmkkkkkkmk', 'kmmmmmmmmk', 'kmmmmmmmmk', 'kmmmmmmmmk', '.kk....kk.'],
+    walkA: null, walkB: null,
+  },
+  shark: {    // 두 턱 상어 · 사람 다리 (꿈꾸는 해류)
+    hand: null,
+    idle:  ['......kk......', '.....kmmk.....', '..kkkmmmmkkk..', '.kmmmmmmmmemk.', 'kmmwwwwwwwwwmk', 'kmkwkwkwkwkwmk', 'kmmmmmmmmmmmk.', '.kmmkwkwkwmk..', '..kkkkkkkkk...', '....kp..kp....', '....kk..kk....'],
+    walkA: ['......kk......', '.....kmmk.....', '..kkkmmmmkkk..', '.kmmmmmmmmemk.', 'kmmwwwwwwwwwmk', 'kmkwkwkwkwkwmk', 'kmmmmmmmmmmmk.', '.kmmkwkwkwmk..', '..kkkkkkkkk...', '...kp....kp...', '...kk....kk...'],
+    walkB: null,
+  },
+  plant: {    // 사과 머리 · 덩굴 몸 (백설공주의 사과)
+    hand: null,
+    idle:  ['.....kgk....', '...kkrrkk...', '..krrrrrrk..', '..krrerrrk..', '..krrrrrrk..', '...kkrrkk...', '....kgk.....', '..kgkgkgk...', '.kg.kgk.gk..', '....kgk.....', '...kg.gk....', '..kg...gk...'],
+    walkA: null, walkB: null,
+  },
   cloak: {
     hand: [9, 7],
     idle:  C_TOP.concat(['..km..mk..', '..kk..kk..']),
@@ -85,7 +136,7 @@ function getSprite(type, frame, pal, scale, flip, white) {
   const key = type + '|' + frame + '|' + JSON.stringify(pal) + '|' + scale + '|' + (flip ? 1 : 0) + (white ? 'w' : '');
   let c = spriteCache.get(key);
   if (c) return c;
-  const rows = SPR[type][frame];
+  const rows = SPR[type][frame] || SPR[type].idle;   // 걷기 그림이 없는 모양은 서 있는 그림으로
   const w = rows[0].length, h = rows.length;
   c = document.createElement('canvas');
   c.width = w * scale; c.height = h * scale;
@@ -152,6 +203,15 @@ if (typeof GEAR_ATLAS !== 'undefined' && GEAR_ATLAS.forms.length) {
   };
   gearAtlasImg.src = 'assets/gear_atlas.png?n=' + GEAR_ATLAS.forms.length;
 }
+const egoAtlasImg = new Image(); let egoAtlasReady = false;
+if (typeof EGO_ATLAS !== 'undefined' && EGO_ATLAS.length) { egoAtlasImg.onload = () => { egoAtlasReady = true; iconCanvasCache.clear(); iconURLCache.clear(); }; egoAtlasImg.src = 'assets/ego_atlas.png?n=' + EGO_ATLAS.length; }
+function egoIcon(g) {
+  if (!g.ego || !egoAtlasReady) return null;
+  const i = EGO_ATLAS.indexOf(g.ego); if (i < 0) return null;
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  c.getContext('2d').drawImage(egoAtlasImg, i * 32, 0, 32, 32, 0, 0, 32, 32);
+  return decorateIcon(c, g);
+}
 function atlasIcon(g) {
   if (!gearAtlasReady) return null;
   const row = GEAR_ATLAS.forms.indexOf(g.form); if (row < 0) return null;
@@ -189,6 +249,8 @@ function decorateIcon(c, g) {
 function gearIconCanvas(g) {
   let c = iconCanvasCache.get(iconKey(g));
   if (c) return c;
+  const eg = egoIcon(g);   // E.G.O 장비는 그 환상체의 무기 그림
+  if (eg) { iconCanvasCache.set(iconKey(g), eg); return eg; }
   const at = atlasIcon(g);
   if (at) { iconCanvasCache.set(iconKey(g), at); return at; }
   c = document.createElement('canvas');
