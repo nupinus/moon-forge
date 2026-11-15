@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문 포지</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css">
+<link rel="stylesheet" href="css/style.css?v=110">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><b id="tbWorkshop">공방</b><small id="tbOffice"></small></div>
+    <div class="tb-stats">
+      <div class="stat"><label>구역</label><b id="tbDistrict">-</b></div>
+      <div class="stat"><label>일차</label><b id="tbDay">-</b></div>
+      <div class="stat"><label>시각</label><b id="tbTime">-</b></div>
+      <div class="stat"><label>자금</label><b id="tbMoney">-</b></div>
+      <div class="stat"><label>명성</label><b id="tbFame">-</b></div>
+      <div class="stat hidden" id="tbAmmoStat"><label>탄환</label><b id="tbAmmo">-</b></div>
+    </div>
+    <div class="tb-btns">
+      <button id="btnPause" data-act="pause" title="일시정지 (P)">❚❚ 정지</button>
+      <button id="btnSpeed" data-act="speed" title="게임 속도">배속 ×1</button>
+      <button id="btnClose" class="warnbtn" data-act="closeShopBtn">마감하기</button>
+      <button data-act="help">도움말</button>
+      <button data-act="menu">메뉴</button>
+    </div>
+    <div id="dayProgress"><div></div></div>
+  </header>
+
+  <main id="openView">
+    <!-- 단조 (기본 화면) -->
+    <section class="view on" id="view-forge">
+      <div class="panel forge-main" id="forgePanel">
+        <h2>단조대 <small id="forgeSub"></small></h2>
+        <canvas id="anvil" width="320" height="200"></canvas>
+        <div id="timingWrap" class="hidden"></div>
+        <div id="forgeBody"></div>
+        <div id="forgeControls"></div>
+      </div>
+      <div class="panel forge-side">
+        <h2>재료함 <small id="stockSub">오늘 사용 가능</small></h2>
+        <div id="stockGrid"></div>
+      </div>
+    </section>
+
+    <!-- 현장 -->
+    <section class="view" id="view-hunt">
+      <div class="panel" id="huntPanel">
+        <h2>현장 <small id="huntSub"></small><button id="btnRetreat" class="warnbtn" data-act="retreat">철수</button></h2>
+        <div class="feedwrap"><canvas id="huntCanvas" width="384" height="180"></canvas>
+          <div id="feedBlock" class="hidden"><b>14구 — 녹화 금지</b><p>N사 둥지의 금기로 현장 영상은 녹화도 시청도 할 수 없습니다.<br>무전 보고만 받습니다.</p><div id="radioFeed" class="radio"></div><button class="warnbtn" data-act="watchFeed">몰래 영상 보기 (금기 위반)</button></div></div>
+        <div id="partyBars"></div>
+      </div>
+      <div class="panel" id="incomingPanel"><h2>수급한 재료 <small>내일 아침 입고</small></h2><div id="incomingList" class="chips"></div></div>
+    </section>
+
+    <!-- 의뢰 -->
+    <section class="view" id="view-orders">
+      <div class="panel" id="ordersPanel"><h2>오늘의 의뢰 <small>마감 시 만료</small></h2><div id="ordersList"></div></div>
+    </section>
+
+    <!-- 보관함 -->
+    <section class="view" id="view-storage">
+      <div class="panel" id="storagePanel"><h2>보관함 <small id="storageCount"></small></h2><div id="storageList"></div></div>
+    </section>
+
+    <!-- 기록 -->
+    <section class="view" id="view-log">
+      <div class="panel" id="logPanel"><h2>기록</h2><div id="logList"></div></div>
+    </section>
+  </main>
+
+  <nav id="tabbar">
+    <div class="tabs">
+      <button class="on" data-act="view" data-v="forge" title="단조 (단축키 1)"><i>⚒</i><span>단조</span></button>
+      <button data-act="view" data-v="hunt" title="현장 (단축키 2)"><i>⚔</i><span>현장</span><b class="badge" id="bdHunt"></b></button>
+      <button data-act="view" data-v="orders" title="의뢰 (단축키 3)"><i>✉</i><span>의뢰</span><b class="badge" id="bdOrders"></b></button>
+      <button data-act="view" data-v="storage" title="보관함 (단축키 4)"><i>▣</i><span>보관함</span><b class="badge" id="bdStorage"></b></button>
+      <button data-act="view" data-v="log" title="기록 (단축키 5)"><i>≡</i><span>기록</span><b class="badge" id="bdLog"></b></button>
+    </div>
+  </nav>
+
+  <div id="overlay" class="hidden"></div>
+  <div id="modal" class="hidden"></div>
+  <div id="toasts"></div>
+</div>
+<script src="js/data.js?v=110"></script>
+<script src="js/gear_atlas.js?v=110"></script>
+<script src="js/sprites.js?v=110"></script>
+<script src="js/state.js?v=110"></script>
+<script src="js/cloud.js?v=110"></script>
+<script src="js/forge.js?v=110"></script>
+<script src="js/hunt.js?v=110"></script>
+<script src="js/ui.js?v=110"></script>
+<script src="js/main.js?v=110"></script>
+</body>
+</html>
