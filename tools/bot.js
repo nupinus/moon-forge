@@ -18,6 +18,8 @@ window.Bot = {
     const F = Forge;
     if (F.result) { F.next(); return; }
     if (!F.blank) {
+      const T = !S.outskirts && districtTaboo().id;
+      if (T === 'overtime' && S.time > 1000) return;              // 20구: 마감 직전에는 새로 시작하지 않는다
       let kind = this.needKind();
       let main = this.pickMain(kind);
       if (!main) { kind = kind === 'weapon' ? 'armor' : 'weapon'; main = this.pickMain(kind); }
@@ -38,13 +40,15 @@ window.Bot = {
     if (F.contraWarn) { F.finishCancel(); F.blank = null; return; }
     const p = F.probs('perfect');
     const risky = p.destroy + (b.hp <= 1 ? p.damage : 0);
-    if (b.strikes >= b.maxStrikes || risky > (this.risk || 12)) { F.finish(); return; }
+    const T = !S.outskirts && districtTaboo().id;
+    let done = b.strikes >= b.maxStrikes || risky > (this.risk || 12) || (T === 'overtime' && S.time > 1040);
+    if (done) { F.finish(); return; }
     if (F.lock > 0 || F.reheatT > 0) return;
     if (F.heatTier() === 'perfect') { Game.paused = false; F.strike(); Game.paused = true; }
     else F.reheat();
   },
   deliverAll() {
-    for (const o of S.orders) if (!o.done && matchGear(o)) ACT.deliver({ id: o.id });
+    for (const o of S.orders) if (!o.done) { const l = matchGears(o).sort((a, b) => a.value - b.value); if (l.length) ACT.deliver({ id: o.id, gid: l[0].id }); }   // 여러 개면 가장 싼 것을 낸다
   },
   closeActions() {
     // 장착: 각 해결사에게 가장 좋은 무기/방어구
@@ -69,6 +73,11 @@ window.Bot = {
     if (wc && S.money >= wc.money + 300000 && S.fame >= wc.fame) ACT.upWorkshop();
     const oc = OFFICE_UP[S.oGrade];
     if (oc && S.money >= oc.money + 300000 && S.fame >= oc.fame) ACT.upOffice();
+    // 공방 시설: 여유가 있으면 싼 것부터
+    if (typeof FACILITIES !== 'undefined' && !this.noFac) for (const k of Object.keys(FACILITIES).sort((a, b) => FACILITIES[a].cost[0] - FACILITIES[b].cost[0])) {
+      const F = FACILITIES[k], lv = facLv(k); if (lv >= F.cost.length || S.wLevel < F.minW) continue;
+      if (S.money > F.cost[lv] * M_ * 1.6 + 3 * M_) ACT.buyFac({ k });
+    }
     // 고용
     if (S.fixers.length < maxMembers()) {
       const c = S.candidates.slice().sort((a, b) => b.lv - a.lv).find(c => c.cost < S.money * 0.4);
@@ -76,6 +85,11 @@ window.Bot = {
     }
     // 출동 지역: 갈 수 있는 가장 높은 곳(봇 설정 zoneLag 만큼 낮춤)
     const okZ = ZONES.map((z, i) => i).filter(i => S.oGrade <= ZONES[i].req); S.zone = Math.max(0, okZ[okZ.length - 1] - (this.zoneLag || 0));
+    const T = !S.outskirts && districtTaboo().id;
+    if (T === 'voyage' && S.lastZone === S.zone && (S.zoneStreak || 0) >= 3) S.zone = Math.max(0, S.zone - 1);   // 21구: 나흘째는 다른 물길로
+    // 밤 경계: 12구는 환상체를 쓰러뜨린 날 한 명 세운다 (7구는 세우지 않는다)
+    S.fixers.forEach(f => { f.nightWatch = false; });
+    if (T === 'watchabno' && S.report && S.report.abno && S.fixers[0]) S.fixers[0].nightWatch = true;
     // 출동: 가용 인원 최대 4명
     S.party = S.fixers.filter(isAvailable).slice(0, MAX_PARTY).map(f => f.id);
     // 시장: 자금 여유 있으면 다음 등급 금속/천 2개씩
@@ -83,7 +97,7 @@ window.Bot = {
   },
   // 하루 진행. 반환: 그날 요약
   day() {
-    if (S.phase === 'morning') { if (S.finger) Game.fingerAnswer(Math.random() < 0.5); Game.openShop(); }
+    if (S.phase === 'morning') { if (S.finger) Game.fingerAnswer(Math.random() < 0.5); S.party = S.fixers.filter(isAvailable).slice(0, MAX_PARTY).map(f => f.id); Game.openShop(); }
     Game.paused = true;
     const dt = 0.05;
     let guard = 0, endT = 0;
@@ -111,7 +125,7 @@ window.Bot = {
     this.stats.push(sum);
     return sum;
   },
-  fresh() { localStorage.removeItem(SAVE_KEY); applyZonesFor(false); newGame("봇 공방", "봇 사무소", 0); Game.startDay(); this.stats = []; },
+  fresh(dist) { localStorage.removeItem(SAVE_KEY); if (dist == null) dist = randInt(0, DISTRICTS.length - 1); applyZonesFor(false, dist); newGame("봇 공방", "봇 사무소", dist); Game.startDay(); this.stats = []; },
   run(n) { window.BOT_MUTE = true; const out = []; for (let i = 0; i < n; i++) { const s = this.day(); out.push(s); if (!S || s.end) break; } return out; },
 };
 'bot loaded';

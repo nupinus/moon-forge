@@ -15,6 +15,30 @@ Object.assign(ENEMIES, {
 // ---------- 환상체 고유 능력 (적) ----------
 // tick: 매 프레임 · hit: 해결사를 칠 때(피해 배율 반환) · hurt: 맞았을 때 · spawn: 나타날 때
 const ABNO_AB = {
+  // ---- 날개 소속 (환상체가 아닌 적의 고유 능력) ----
+  k_ampule: { name: '재생 앰플', desc: '맞지 않는 동안 상처가 빠르게 아문다',
+    hurt(e) { e.ab.calm = 0; },
+    tick(e, dt) { e.ab.calm = (e.ab.calm || 0) + dt; if (e.ab.calm > 2) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.02 * dt); } },
+  k_overdose: { name: '앰플 과다 투여', desc: '체력이 절반 아래로 떨어지면 앰플을 몰아 맞아 되살아나고 빨라진다',
+    tick(e, dt, H) { if (!e.ab.dose && e.hp < e.maxHp * 0.5) { e.ab.dose = 1; e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.25); e.interval *= 0.75; H.float(e.x, e.y - 50, '앰플 과다 투여', '#7affb0', true); H.radioLog(`${e.name}이(가) 앰플을 몰아 맞았다!`, 'bad'); } } },
+  nh_zeal: { name: '광신', desc: '궁지에 몰릴수록 망치가 무거워진다',
+    tick(e, dt, H) { if (!e.ab.zeal && e.hp < e.maxHp * 0.5) { e.ab.zeal = 1; H.float(e.x, e.y - 50, '광신', '#e0c070', true); } },
+    hit(e) { return e.ab.zeal ? 1.5 : 1; } },
+  nh_verdict: { name: '심판의 일격', desc: '때때로 힘을 모아 내리쳐 상대를 쓰러뜨린다',
+    tick(e, dt, H) { if (!e.ab.charge && H.every(e, 'verdict', 10, dt)) { e.ab.charge = 1; H.float(e.x, e.y - 50, '심판', '#ffb050', true); } },
+    hit(e, u) { if (e.ab.charge) { e.ab.charge = 0; u.stunT = 1; return 2.5; } return 1; } },
+  k_bud: { name: '증식', desc: '찢긴 살점에서 실패작이 또 자라난다',
+    tick(e, dt, H) { if (H.every(e, 'bud', 10, dt) && H.foes().length < 7) { H.summon('k_failure', e.x + 14, 1); H.float(e.x, e.y - 50, '증식', '#3aff9a'); } } },
+  r_pack: { name: '무리 부르기', desc: '때때로 사냥 클론견을 부른다',
+    tick(e, dt, H) { if (H.every(e, 'pack', 12, dt) && H.foes().length < 7) { H.summon('r_hound', e.x + 20, 1); H.float(e.x, e.y - 50, '울부짖음', '#ff9a6a'); } } },
+  r_drill: { name: '일제 공격', desc: '구령에 맞춰 무리 전체가 한꺼번에 공격한다',
+    tick(e, dt, H) { if (H.every(e, 'drill', 10, dt)) { for (const o of H.foes()) o.cd = 0; H.float(e.x, e.y - 50, '일제 공격!', '#ff6a3a', true); } } },
+  r_antler: { name: '뿔 지원', desc: '때때로 무리 전체를 치료한다',
+    tick(e, dt, H) { if (H.every(e, 'heal', 7, dt)) { for (const o of H.foes()) o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.05); H.float(e.x, e.y - 50, '뿔 지원', '#ffb070'); } } },
+  r_ram: { name: '돌진 장갑', desc: '두꺼운 장갑으로 버티다 때때로 들이받아 앞줄을 쓰러뜨린다 — 체력이 절반 아래면 장갑이 깨진다',
+    tick(e, dt, H) {
+      if (!e.ab.broke && e.hp < e.maxHp * 0.5) { e.ab.broke = 1; e.def *= 0.55; H.float(e.x, e.y - 50, '장갑 파괴', '#ffd84a', true); }
+      if (H.every(e, 'ram', 9, dt)) { const near = H.alive().filter(u => Math.abs(u.x - e.x) < 50); near.forEach(u => { u.stunT = 1.2; }); if (near.length) H.float(e.x, e.y - 50, '돌진!', '#ff5a2a', true); } } },
   punishing: { name: '징벌', desc: '여러 번 맞으면 분노해 부리가 커진다',
     hurt(e, H) { const a = e.ab; a.hits = (a.hits || 0) + 1; if (a.hits >= 6 && !a.rage) { a.rage = 3; H.float(e.x, e.y - 50, '분노!', '#ff3b3b', true); H.radioLog(`${e.name}이(가) 분노했다 — 부리가 갈라진다!`, 'bad'); } },
     hit(e) { if (e.ab.rage > 0) { e.ab.rage--; if (!e.ab.rage) e.ab.hits = 0; return 2.5; } return 1; } },
@@ -103,3 +127,4 @@ const EGO_AB = {
 };
 for (const k in EGO_AB) if (EGO[k]) EGO[k].desc = `${EGO[k].desc} — ${EGO_AB[k].desc}`;
 for (const k of ABNO_KEYS) ENEMIES[k].ab = k.slice(3);   // 환상체마다 고유 능력
+krwEnemies();   // abno.js에서 추가된 적

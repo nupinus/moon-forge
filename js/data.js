@@ -2,8 +2,9 @@
 // 화폐 '안'은 한국 원화 기준 가치 (원작에서도 안 ≈ 원). 아래 수치는 천 안 단위로 적고 KRW를 곱한다.
 const KRW = 1000;
 // ---------- 버전 · 공지 (커밋할 때마다 올린다 — 내용은 짧게, 숨은 것은 알려주지 않는다) ----------
-const GAME_VERSION = '1.1';
+const GAME_VERSION = '1.2';
 const NOTICES = [
+  { v: '1.2', date: '2026-11-18', items: ['저장 후 이어하면 구역이 바뀌던 문제를 비롯한 여러 버그를 고쳤습니다', '새로운 구 7곳이 열렸습니다 — 구마다 현장의 모습과 금기가 다릅니다', '금기가 더 이상 대장간 일을 막지 않습니다', '두드리는 동안 완성될 장비의 능력치를 볼 수 있습니다', '대성공 별명에 등급이 생겼습니다', '각인의 세기가 장비 등급에 따라 달라집니다', '지은 이름이 장비의 이름이 됩니다', '공방이 커질수록 찾아오는 손님이 달라집니다', '공방에 새로운 시설이 들어설 자리가 생겼습니다', '가끔 경매장이 열립니다', '원정을 떠날 수 있습니다', '누군가의 자아가 피어날지도 모릅니다', '처음 시작하는 공방주를 위한 안내가 생겼습니다', '손가락, 재료값 등 여러 가지를 다듬었습니다'] },
   { v: '1.1', date: '2026-11-16', items: ['장비 그림을 새로 그렸습니다', '단조대가 새 단장을 했습니다', '뒷골목에 새 구역과 출동 지역이 생겼습니다', '재료마다 망치질의 손맛이 다릅니다', '같은 종류 장비는 골라서 납품할 수 있습니다', '승급의 순간을 축하합니다', '하루가 조금 길어졌습니다', '현장에 더 많은 환상체가 나타납니다', '환상체마다 저만의 능력이 있습니다', 'E.G.O 장비가 제 모습을 찾았습니다', '현장과 단조대를 새로 그렸습니다', '상단에 공지 버튼이 생겼습니다', '새 버전이 나오면 구석에서 조용히 알려 드립니다', '구역을 누르면 그곳의 날개와 금기를 볼 수 있습니다', '재료함이 등급별로 정리됩니다', '장비 값이 등급과 솜씨, 깃든 힘에 따라 매겨집니다'] },
   { v: '1.0', date: '2026-11-15', items: ['첫 공개'] },
 ];
@@ -19,21 +20,21 @@ const HUNT_YIELD = DAY_SPEED / 5;   // 하루가 길어진 만큼 처치당 보�
 const MATERIALS = {
   scrap:     { name: '고철',          grade: 1, cat: 'metal',  color: '#9a8f80', price: 15,  adj: '고철' },
   steel:     { name: '강철 조각',     grade: 2, cat: 'metal',  color: '#c3ced6', price: 45,  adj: '강철' },
-  alloy:     { name: '특수 합금',     grade: 3, cat: 'metal',  color: '#7fd6c8', price: 140, adj: '합금' },
-  blackiron: { name: '흑철',          grade: 4, cat: 'metal',  color: '#7a6f9a', price: 320, adj: '흑철' },
+  alloy:     { name: '특수 합금',     grade: 3, cat: 'metal',  color: '#7fd6c8', price: 110, adj: '합금' },
+  blackiron: { name: '흑철',          grade: 4, cat: 'metal',  color: '#7a6f9a', price: 240, adj: '흑철' },
   stigma:    { name: '성흔 금속',     grade: 5, cat: 'metal',  color: '#f0d77a', price: 0,   adj: '성흔' },
   leather:   { name: '가죽 끈',       grade: 1, cat: 'fabric', color: '#9a643f', price: 12,  adj: '가죽' },
   kevlar:    { name: '방탄 섬유',     grade: 2, cat: 'fabric', color: '#7a8a5a', price: 40,  adj: '방탄' },
-  weave:     { name: '강화 섬유',     grade: 3, cat: 'fabric', color: '#4f74a8', price: 130, adj: '강화' },
-  silk:      { name: '이질 비단',     grade: 4, cat: 'fabric', color: '#b05a92', price: 300, adj: '비단' },
+  weave:     { name: '강화 섬유',     grade: 3, cat: 'fabric', color: '#4f74a8', price: 105, adj: '강화' },
+  silk:      { name: '이질 비단',     grade: 4, cat: 'fabric', color: '#b05a92', price: 230, adj: '비단' },
   dawn:      { name: '여명의 천',     grade: 5, cat: 'fabric', color: '#f2e8d0', price: 0,   adj: '여명' },
   bone:      { name: '뼛조각',        grade: 1, cat: 'shape', shape: 'spear', color: '#e3dcc2', price: 10 },
   cog:       { name: '기계 톱니',     grade: 2, cat: 'shape', shape: 'gun',   color: '#c9a050', price: 25, gunpart: true },
   clot:      { name: '핏방울 응고물', grade: 1, cat: 'core', trait: 'bleed',   color: '#c0303f', price: 30 },
   fuel:      { name: '타다 남은 연료', grade: 2, cat: 'core', trait: 'burn',    color: '#ef8a2e', price: 70 },
   coil:      { name: '진동 코일',     grade: 2, cat: 'core', trait: 'tremor',  color: '#e3cf4a', price: 70 },
-  crystal:   { name: '균열 수정',     grade: 3, cat: 'core', trait: 'rupture', color: '#66d9ef', price: 200 },
-  battery:   { name: '충전 배터리',   grade: 3, cat: 'core', trait: 'charge',  color: '#7fb2ff', price: 200 },
+  crystal:   { name: '균열 수정',     grade: 3, cat: 'core', trait: 'rupture', color: '#66d9ef', price: 150 },
+  battery:   { name: '충전 배터리',   grade: 3, cat: 'core', trait: 'charge',  color: '#7fb2ff', price: 150 },
   ink:       { name: '침전된 잉크',   grade: 4, cat: 'core', trait: 'sinking', color: '#6a6fe0', price: 0 },
   pendulum:  { name: '고요한 추',     grade: 4, cat: 'core', trait: 'poise',   color: '#d8d8f4', price: 0 },
   // --- 확장 재료 ---
@@ -232,8 +233,23 @@ const OUTCOMES = {
 };
 const OUTCOME_ORDER = ['destroy', 'damage', 'keep', 'success', 'great'];
 
-const EPITHETS = ['「잿불」', '「뒷골목의 별」', '「쇳소리」', '「붉은 눈」', '「밤의 송곳니」', '「마지막 못」',
-  '「녹슨 맹세」', '「심야의 종」', '「검은 파도」', '「장인의 숨」', '「골목의 왕관」', '「무명」'];
+// 대성공 별명 — 대성공을 많이 할수록 높은 등급의 별명이 붙는다 (개량하면 대성공이 누적된다)
+const EPITHET_TIERS = [
+  { min: 3, name: '골목의 별명', color: '#cfc4b0', list: ['「잿불」', '「쇳소리」', '「녹슨 맹세」', '「무명」', '「심야의 종」', '「뒷골목의 별」', '「붉은 눈」', '「밤의 송곳니」',
+    '「마지막 못」', '「검은 파도」', '「장인의 숨」', '「골목의 왕관」', '「빗속의 칼」', '「낡은 약속」', '「불씨」', '「모루 자국」', '「달그림자」', '「들개 이빨」',
+    '「찬 바람」', '「야경꾼」', '「굽은 못」', '「연기 한 줄기」', '「새벽 종소리」', '「뒷문」', '「젖은 성냥」', '「골목 끝 등불」'] },
+  { min: 5, name: '알려진 별명', color: '#7fc8ff', list: ['「피어린 서약」', '「강철 장송곡」', '「잿빛 전령」', '「침묵하는 모루」', '「밤을 가르는 자」', '「무너진 성벽」',
+    '「아홉 번째 못」', '「뒷골목의 사신」', '「녹슬지 않는 맹세」', '「불꽃의 증인」', '「끊어진 사슬」', '「검은 성좌」', '「한밤의 처형인」', '「흩날리는 재」',
+    '「깨어진 달」', '「고요한 폭풍」', '「핏빛 저녁놀」', '「도시의 흉터」', '「울리는 종의 칼」', '「얼어붙은 불길」'] },
+  { min: 7, name: '이름난 별명', color: '#c890ff', list: ['「별을 삼킨 모루」', '「백 번의 밤을 넘은 쇠」', '「무너지지 않는 둥지」', '「잿더미 위의 왕관」', '「도시를 가르는 선」',
+    '「끝나지 않는 장송곡」', '「피로 쓴 계약서」', '「천 개의 못을 박은 망치」', '「잠들지 않는 대장간」', '「검붉은 혜성」', '「영원히 식지 않는 쇠」',
+    '「심연을 두드린 소리」', '「마지막 날의 종」', '「날개를 꺾는 칼날」', '「밤의 끝을 본 자」', '「둥지를 울린 굉음」'] },
+  { min: 10, name: '전설의 별명', color: '#ffcf4a', list: ['「도시의 별을 벼린 손」', '「머리조차 기억하는 이름」', '「꺼지지 않는 첫 불꽃」', '「모든 둥지의 악몽」',
+    '「신을 두드린 망치」', '「황혼을 끝낸 칼날」', '「세계를 다시 벼린 손」', '「뒷골목이 노래하는 전설」', '「발톱도 비켜 간 쇠」', '「백야를 가른 강철」',
+    '「별빛을 담금질한 자」', '「도시가 잊지 못할 이름」'] },
+];
+const EPITHETS = EPITHET_TIERS[0].list;   // 예전 코드 호환
+function epithetTier(greats) { let t = -1; EPITHET_TIERS.forEach((T, i) => { if ((greats || 0) >= T.min) t = i; }); return t; }
 
 const WORKSHOP_LEVELS = [
   { name: '간이 공방',         up: { money: 400,  fame: 15 } },
@@ -290,7 +306,7 @@ const ZONES = [
     drops: { blackiron: 4, silk: 3, ink: 2, pendulum: 2, meteor: 2, stigma: 1, dawn: 1, ember: 2, resonator: 1, capacitor: 1, brushtip: 1, scope: 1, mechcore: 1, servo: 1 }, rare: ['stigma', 'dawn', 'capacitor', 'brushtip', 'scope', 'mechcore'], fame: 27, lvl: 3.5 },
   { name: 'N사 둥지 경계', req: 1,
     pal: { sky: '#1e1a12', far: '#2e2818', mid: '#3e3620', ground: '#26221a', line: '#3a3324', edge: '#4c4430', win: '#f0d77a' },
-    enemies: ['guard', 'shade'], boss: 'shadowfixer', waveSize: [1, 3],
+    enemies: ['guard', 'shade'], boss: 'shadowfixer', waveSize: [1, 3], wing: 'N사', bg: 'z8',
     drops: { blackiron: 3, silk: 3, stigma: 2, dawn: 2, ink: 2, pendulum: 2, meteor: 2, capacitor: 1, ember: 1, mechcore: 1, vamplate: 1 }, rare: ['stigma', 'dawn', 'capacitor', 'mechcore'], fame: 35, lvl: 4 },
 ];
 // 지역 난이도 단계 (특수 습격·현상금·후퇴 실패율에 쓰인다). lvl이 없으면 순번.
@@ -345,6 +361,17 @@ const COATS = ['#3d4a5c', '#5a3030', '#3a4a3a', '#5a4a30', '#4a3a5a', '#2a2a2a',
 const PANTS = ['#1e1e24', '#2a2420', '#24242e', '#30282a'];
 const SKINS = ['#f0c8a0', '#e0b090', '#c89070', '#f4d4b4'];
 
+// 의뢰인 층 — 공방 등급(Lv)이 오를수록 더 높은 곳에서 일감이 온다. 낮은 층은 공방이 커지면 점점 발길을 끊는다.
+// mult: 보수 배율 · fame: 추가 명성 · {wing}은 공방이 있는 구의 날개 이름
+// 특성 레벨은 로마 숫자로 적는다 (I · II · III …)
+function roman(n) { n = Math.max(0, n | 0); const R = [[10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]; let o = ''; for (const [v, c] of R) while (n >= v) { o += c; n -= v; } return o || '0'; }
+const CLIENT_TIERS = [
+  { w: 1, mult: 1.00, fame: 0, list: ['뒷골목 자경단', '이름 없는 9급 사무소', '쥐 사냥꾼 패거리', '골목 상인회', '떠돌이 해결사', '뒷골목 경비원'] },
+  { w: 2, mult: 1.08, fame: 1, list: ['갈고리 사무소', '마침표 사무소', '7급 해결사 사무소', '뒷골목 수금 조직', '중견 사무소 해결사'] },
+  { w: 3, mult: 1.16, fame: 2, list: ['츠바이 협회', '하나 협회', '세븐 협회', '리우 협회', '시 협회', '생크 협회'] },
+  { w: 4, mult: 1.28, fame: 3, list: ['휠스 인더스트리(하청)', '로직 아틀리에(하청)', '크리스탈 아틀리에(하청)', '묵 공방(하청)', '랑아 공방(하청)', '알라스 공방(하청)', '1급 해결사 사무소', 'K사 연구원(외부 의뢰)'] },
+  { w: 5, mult: 1.45, fame: 5, list: ['{wing} 직원', '{wing} 둥지 경비대', '이름난 특색 해결사', '협회 본부', '둥지의 귀족'] },
+];
 const CLIENTS = ['츠바이 협회', '하나 협회', '세븐 협회', '리우 협회', '시 협회', '생크 협회', '갈고리 사무소', '마침표 사무소',
   '휠스 인더스트리(하청)', '로직 아틀리에(하청)', '크리스탈 아틀리에(하청)', '묵 공방(하청)', '랑아 공방(하청)', '알라스 공방(하청)'];
 
@@ -385,16 +412,16 @@ const COLOR_TITLES = [
 const COLOR_REQ = { lv: 25, kills: 400, bosses: 5 };
 // 특색(색) 계열 — 장비 이름에 이 낱말이 들어 있으면 그 색으로 특색을 받는다 (마스터 등급 이상만 이름을 지을 수 있다)
 const COLOR_FAMILIES = [
-  { key: 'red',    adj: '붉은',   color: '#ff4a4a', words: ['붉은', '빨간', '빨강', '적색', '진홍', '다홍', '홍색', '크림슨', '레드', 'red', 'crimson', 'scarlet'], perk: '공격 +5%' },
-  { key: 'blue',   adj: '푸른',   color: '#5fa8ff', words: ['푸른', '파란', '파랑', '청색', '남색', '쪽빛', '블루', 'blue', 'azure'], perk: '공격 속도 +5%' },
-  { key: 'black',  adj: '검은',   color: '#a0a0b0', words: ['검은', '까만', '흑색', '칠흑', '블랙', 'black'], perk: '치명타 +6%' },
-  { key: 'white',  adj: '하얀',   color: '#f4f4f4', words: ['하얀', '흰', '백색', '순백', '화이트', 'white'], perk: '체력 +8%' },
-  { key: 'purple', adj: '보랏빛', color: '#b07aff', words: ['보라', '자색', '자주', '바이올렛', 'purple', 'violet'], perk: '환상체에게 주는 피해 +15%' },
-  { key: 'yellow', adj: '노란',   color: '#ffcf4a', words: ['노란', '노랑', '황색', '금빛', '황금', '금색', '골드', 'yellow', 'gold', 'golden'], perk: '현장 수입 +15%' },
-  { key: 'green',  adj: '푸르른', color: '#6fdc8c', words: ['초록', '녹색', '비취', '그린', 'green', 'jade'], perk: '전투 중 체력 재생' },
-  { key: 'orange', adj: '주홍빛', color: '#ff8a3a', words: ['주황', '오렌지', '주홍', 'orange'], perk: '공격 +3% · 공격 속도 +3%' },
-  { key: 'silver', adj: '은빛',   color: '#c8d0d8', words: ['은빛', '은색', '실버', 'silver'], perk: '방어 +8%' },
-  { key: 'gray',   adj: '잿빛',   color: '#9a9a9a', words: ['잿빛', '회색', '그레이', 'gray', 'grey', 'ash'], perk: '회피 +6%' },
+  { key: 'red',    adj: '붉은',   color: '#ff4a4a', words: ['핏빛', '피빛', '루비', '장밋빛', '선홍', '붉은', '빨간', '빨강', '적색', '진홍', '다홍', '홍색', '크림슨', '레드', 'red', 'crimson', 'scarlet'], perk: '공격 +5%' },
+  { key: 'blue',   adj: '푸른',   color: '#5fa8ff', words: ['하늘빛', '사파이어', '남빛', '청람', '푸른', '파란', '파랑', '청색', '남색', '쪽빛', '블루', 'blue', 'azure'], perk: '공격 속도 +5%' },
+  { key: 'black',  adj: '검은',   color: '#a0a0b0', words: ['흑빛', '먹빛', '먹색', '새까만', '어둠', '검은', '까만', '흑색', '칠흑', '블랙', 'black'], perk: '치명타 +6%' },
+  { key: 'white',  adj: '하얀',   color: '#f4f4f4', words: ['새하얀', '설백', '은백', '백야', '하얀', '흰', '백색', '순백', '화이트', 'white'], perk: '체력 +8%' },
+  { key: 'purple', adj: '보랏빛', color: '#b07aff', words: ['자줏빛', '라벤더', '자수정', '보라', '자색', '자주', '바이올렛', 'purple', 'violet'], perk: '환상체에게 주는 피해 +15%' },
+  { key: 'yellow', adj: '노란',   color: '#ffcf4a', words: ['황금빛', '호박색', '샛노란', '노란', '노랑', '황색', '금빛', '황금', '금색', '골드', 'yellow', 'gold', 'golden'], perk: '현장 수입 +15%' },
+  { key: 'green',  adj: '푸르른', color: '#6fdc8c', words: ['에메랄드', '청록', '풀빛', '연두', '초록빛', '초록', '녹색', '비취', '그린', 'green', 'jade'], perk: '전투 중 체력 재생' },
+  { key: 'orange', adj: '주홍빛', color: '#ff8a3a', words: ['노을빛', '귤빛', '주황빛', '주황', '오렌지', '주홍', 'orange'], perk: '공격 +3% · 공격 속도 +3%' },
+  { key: 'silver', adj: '은빛',   color: '#c8d0d8', words: ['은빛', '백은', '수은', '은빛', '은색', '실버', 'silver'], perk: '방어 +8%' },
+  { key: 'gray',   adj: '잿빛',   color: '#9a9a9a', words: ['회빛', '재색', '납빛', '잿빛', '회색', '그레이', 'gray', 'grey', 'ash'], perk: '회피 +6%' },
 ];
 // 원작 특색의 이름은 그대로 쓰지 않는다 (다른 사람의 이름이므로)
 const CANON_COLOR_NAMES = ['붉은 안개', '검은 침묵', '푸른 잔향', '보라 눈물', '진홍빛 상흔', '쪽빛 칼날'];
@@ -421,10 +448,10 @@ const LEGACY_COLOR = { '청색': 'blue', '자색': 'purple', '황색': 'yellow',
 const DISTRICTS = [
   { name: '14구 뒷골목', wing: 'N사', desc: 'N사 둥지가 다스리는 14구. 둥지와 뒷골목을 가리지 않고 녹화가 금기다.',
     taboo: { id: 'record', name: '녹화 금지', desc: '구 안에서 실제와 같은 영상을 녹화하거나, 녹화된 영상을 보는 것 — 잠깐 보기만 해도 위반', short: '영상 녹화·시청 금지' } },
-  { name: '7구 뒷골목', wing: 'K사', desc: 'K사 둥지가 다스리는 7구. 한낮의 한 시간 동안은 쇠붙이 소리가 나서는 안 된다.',
-    taboo: { id: 'noon', name: '정오의 침묵', desc: '12:00~13:00에는 쇠를 두드리는 소리를 내면 안 된다 — 망치질 한 번도 위반', short: '12~13시 망치질 금지' } },
-  { name: '19구 뒷골목', wing: 'R사', desc: 'R사 둥지가 다스리는 19구. 해가 기울면 불을 다루는 일을 멈춰야 한다.',
-    taboo: { id: 'dusk', name: '해질녘의 불', desc: '17:00 이후에는 화로에 불을 지피면 안 된다 — 가열 한 번도 위반', short: '17시 이후 가열 금지' } },
+  { name: '11구 뒷골목', wing: 'K사', desc: 'K사 둥지가 다스리는 11구. 한낮의 한 시간 동안은 쇠붙이 소리가 나서는 안 된다.',
+    taboo: { id: 'noretreat', name: '물러서지 않는 피', desc: '앰플이 있는 한 물러설 이유는 없다 — 현장에서 철수 명령을 내리면 위반', short: '현장 철수 금지' } },
+  { name: '18구 뒷골목', wing: 'R사', desc: 'R사 둥지가 다스리는 18구. 해가 기울면 불을 다루는 일을 멈춰야 한다.',
+    taboo: { id: 'fullcrew', name: '무리의 규칙', desc: '무리는 함께 사냥한다 — 출동할 수 있는 인원을 사무소에 남겨 두면 위반', short: '출동 가능 인원 전원 출동' } },
 ];
 // 탄환: 총은 싸지만 탄환이 비싸다
 // 머리의 총기 규제: 탄환에 엄청난 세금 — 한 발이 일반인의 몇 달 치 생활비
@@ -432,7 +459,7 @@ const AMMO_PACK = 1, AMMO_PRICE = 2000 * KRW;
 // 도시의 금기 — 세금: 경고 세 번, 네 번째는 발톱의 처형
 const TAX_PERIOD = 7, TAX_STRIKES = 4;
 
-// ---------- 핑거 (뒷골목 최상위 조직) 이벤트 ----------
+// ---------- 손가락 (뒷골목 최상위 조직) 이벤트 ----------
 const FINGERS = {
   thumb:  { name: '엄지', title: '공물 요구',   color: '#d8a040', soldier: 'thumb_soldier', mat: 'thumb_bullet',
             nature: '엄격한 위계와 예의를 따지는 조직. 공물을 바치면 보호하고, 무례는 총탄으로 갚는다.',
@@ -453,7 +480,7 @@ const FINGERS = {
 const FINGER_KEYS = Object.keys(FINGERS);
 function relLabel(v) { return v >= 70 ? '동맹' : v >= 40 ? '우호' : v > -30 ? '중립' : v > -60 ? '경계' : '적대'; }
 
-// 핑거 전용 재료 (최상급 속성재료)
+// 손가락 전용 재료 (최상급 속성재료)
 Object.assign(MATERIALS, {
   thumb_bullet:    { name: '엄지의 탄환',   grade: 5, cat: 'core', trait: 'poise',   color: '#d8a040', price: 0 },
   index_prescript: { name: '검지의 지령서', grade: 5, cat: 'core', trait: 'tremor',  color: '#8a8fff', price: 0 },
@@ -463,7 +490,7 @@ Object.assign(MATERIALS, {
 });
 MAT_ORDER.push('thumb_bullet', 'index_prescript', 'middle_oath', 'ring_pigment', 'pinky_letter');
 
-// 핑거 조직원 (적대 시 현장에 매복) — 지역 깊이에 따라 강해진다
+// 손가락 조직원 (적대 시 현장에 매복) — 지역 깊이에 따라 강해진다
 Object.assign(ENEMIES, {
   thumb_soldier:   { name: '엄지 병사',   sprite: 'human', pal: { h: '#2a2a2a', c: '#6a5a30', p: '#2a2418', s: '#d8b494' }, hp: 140, atk: 16, def: 5, interval: 1.2, range: 120, speed: 26, exp: 30, money: 40, weapon: 'gun', ranged: true },
   index_proselyte: { name: '검지 사도',   sprite: 'human', pal: { h: '#e8e8f0', c: '#2a2a6a', p: '#1a1a3a', s: '#e0bc9c' }, hp: 120, atk: 20, def: 3, interval: 0.9, range: 24, speed: 34, exp: 30, money: 40, weapon: 'sword' },
@@ -473,7 +500,9 @@ Object.assign(ENEMIES, {
 
 // ---------- 원화 기준 환산 (천 안 단위 → 안) ----------
 for (const k in MATERIALS) MATERIALS[k].price *= KRW;
-for (const k in ENEMIES) ENEMIES[k].money = (ENEMIES[k].money || 0) * KRW;
+// 적 보상: 아직 환산하지 않은 것만 한 번씩 (뒤에 추가되는 적도 파일 끝에서 다시 부른다)
+function krwEnemies() { for (const k in ENEMIES) { const e = ENEMIES[k]; if (!e.krw) { e.money = (e.money || 0) * KRW; e.krw = true; } } }
+krwEnemies();
 for (const w of WORKSHOP_LEVELS) if (w.up) w.up.money *= KRW;
 for (const k in OFFICE_UP) OFFICE_UP[k].money *= KRW;
 
@@ -647,7 +676,7 @@ Object.assign(ENEMIES, {
   os_hwanbeast:{ name: '환으로 빚어진 것', sprite: 'bot', pal: { m: '#3a2a3a', r: '#ff4080' }, hp: 6000, atk: 70, def: 24, interval: 1.3, range: 30, speed: 20, exp: 600, money: 300, boss: true, scale: 1.8 },
   berserk:     { name: '광폭화한 해결사', sprite: 'human', pal: { h: '#1a1a1a', c: '#2a0a10', p: '#100808', s: '#8a6a6a' }, hp: 800, atk: 40, def: 10, interval: 0.9, range: 24, speed: 40, exp: 80, money: 0, weapon: 'sword', boss: true, scale: 1.3 },
 });
-for (const k of ['os_beast', 'os_crawler', 'os_drifter', 'os_hwanbeast', 'berserk']) ENEMIES[k].money *= KRW;
+krwEnemies();
 const OUTSKIRTS_ZONES = [
   { name: '외곽 — 무너진 경계', req: 9,
     pal: { sky: '#1a1e18', far: '#242a20', mid: '#2e3628', ground: '#1e221a', line: '#2a3024', edge: '#38402e', win: '#c8ff60' },
@@ -662,10 +691,87 @@ const OUTSKIRTS_ZONES = [
     enemies: ['os_crawler', 'os_drifter'], boss: 'os_hwanbeast', waveSize: [2, 3],
     drops: { stigma: 3, dawn: 2, hb_yu: 1, hb_in: 1, hb_chuk: 1, pendulum: 2 }, rare: ['arbiter_shard', 'hb_yu'], fame: 35 },
 ];
+// ---------- 구마다 다른 현장: 그 구를 다스리는 날개의 색이 깊은 곳으로 갈수록 짙어진다 ----------
+// DISTRICTS와 같은 순서 (14구 N사 · 11구 K사 · 18구 R사). 번호 → 그 자리의 지역을 바꾼다.
+// 난이도(req·lvl·fame·waveSize)는 원래 자리의 것을 그대로 따른다.
+const DISTRICT_ZONES = [
+  { // 14구 — N사: 못과 망치(Nagel und Hammer)의 땅
+    3: { name: '못 박힌 골목',
+      pal: { sky: '#1a1614', far: '#28201c', mid: '#362a24', ground: '#1e1816', line: '#2e2420', edge: '#40322a', win: '#e0c070' },
+      enemies: ['nh_nail', 'nh_penitent'], boss: 'nh_hammer',
+      drops: { steel: 3, kevlar: 2, clot: 3, coil: 2, hammerhead: 2, chainlink: 2, thread: 1, lining: 1, bloodvial: 1, hook: 1, alloy: 1 }, rare: ['alloy', 'weave', 'hammerhead', 'bloodvial'] },
+    5: { name: '이단 심문소',
+      pal: { sky: '#181412', far: '#261e18', mid: '#352820', ground: '#1c1612', line: '#2c221a', edge: '#3e3024', win: '#ffb050' },
+      enemies: ['nh_inquisitor', 'nh_brander'], boss: 'nh_gross',
+      drops: { alloy: 3, weave: 3, blackiron: 2, silk: 1, fuel: 2, crystal: 2, ink: 1, pendulum: 1, hammerhead: 2, heavyplate: 1, greathilt: 1, mechhinge: 1 }, rare: ['blackiron', 'silk', 'ink', 'greathilt'] },
+  },
+  { // 11구 — K사: 재생 앰플의 땅
+    3: { name: '앰플 밀매 골목',
+      pal: { sky: '#121a16', far: '#1a2820', mid: '#22362a', ground: '#141e18', line: '#1e2c22', edge: '#2a3e30', win: '#9affc0' },
+      enemies: ['k_addict', 'k_dealer'], boss: 'k_smuggler',
+      drops: { steel: 3, kevlar: 3, clot: 3, bloodvial: 2, coil: 2, battery: 1, thread: 2, lining: 1, sealant: 1, alloy: 1 }, rare: ['alloy', 'weave', 'bloodvial', 'battery'] },
+    5: { name: 'K사 폐기 처리장',
+      pal: { sky: '#0e1814', far: '#16241c', mid: '#1e3226', ground: '#121a16', line: '#1a2a20', edge: '#26382c', win: '#c8ff60' },
+      enemies: ['k_failure', 'k_disposal'], boss: 'k_bloat',
+      drops: { alloy: 3, weave: 3, battery: 3, crystal: 1, bloodvial: 2, capacitor: 1, synthskin: 1, servo: 1, armmount: 1, sealant: 1, blackiron: 1 }, rare: ['blackiron', 'capacitor', 'synthskin', 'armmount'] },
+    8: { name: 'K사 둥지 경계', req: 1, wing: 'K사', bg: null,
+    pal: { sky: '#101a16', far: '#18281f', mid: '#20362a', ground: '#141c18', line: '#1e2c24', edge: '#2a4034', win: '#7affb0' },
+    enemies: ['k_guard', 'k_cleaner'], boss: 'k_excision', waveSize: [1, 3],
+    drops: { blackiron: 3, silk: 3, stigma: 2, dawn: 2, battery: 2, capacitor: 1, bloodvial: 2, synthskin: 1, servo: 1, mechcore: 1 }, rare: ['stigma', 'dawn', 'capacitor', 'synthskin'], fame: 35, lvl: 4 },
+  },
+  { // 18구 — R사: 제4무리와 클론의 땅
+    3: { name: '클론 사육장 폐허',
+      pal: { sky: '#1a1212', far: '#281a18', mid: '#36221e', ground: '#1e1414', line: '#2e1e1a', edge: '#402a24', win: '#ff9a6a' },
+      enemies: ['r_stray', 'r_hound'], boss: 'r_alpha',
+      drops: { steel: 3, kevlar: 2, clot: 2, fuel: 2, talon: 2, fang: 2, barb: 1, bowstring: 1, braid: 1, alloy: 1 }, rare: ['alloy', 'weave', 'talon', 'barb'] },
+    5: { name: 'R사 훈련장 외곽',
+      pal: { sky: '#1c1210', far: '#2a1a16', mid: '#3a221c', ground: '#1e1412', line: '#2e1c18', edge: '#422822', win: '#ff6a3a' },
+      enemies: ['r_trainee', 'r_fawn'], boss: 'r_instructor',
+      drops: { alloy: 3, weave: 3, fuel: 2, ember: 1, cog: 2, longbarrel: 1, trigger: 1, bowstring: 1, servo: 1, meteor: 1, blackiron: 1 }, rare: ['blackiron', 'silk', 'longbarrel', 'servo'] },
+    8: { name: 'R사 둥지 경계', req: 1, wing: 'R사', bg: null,
+    pal: { sky: '#1c1010', far: '#2a1616', mid: '#3a1e1c', ground: '#1e1414', line: '#2e1c1a', edge: '#442824', win: '#ff7a4a' },
+    enemies: ['r_rabbit', 'r_reindeer'], boss: 'r_rhino', waveSize: [1, 3],
+    drops: { blackiron: 3, silk: 3, stigma: 2, dawn: 2, ember: 2, meteor: 2, pendulum: 1, scope: 1, servo: 2, mechcore: 1 }, rare: ['stigma', 'dawn', 'scope', 'servo'], fame: 35, lvl: 4 },
+  },
+];
+Object.assign(ENEMIES, {
+  // 14구 N사 — 못과 망치
+  nh_nail:      { name: '못',          sprite: 'human', pal: { h: '#5a4a3a', c: '#8a7a5a', p: '#2a2018', s: '#d8b494' }, hp: 100, atk: 15, def: 3, interval: 1.1, range: 22, speed: 30, exp: 18, money: 12, weapon: 'dagger' },
+  nh_penitent:  { name: '고행자',      sprite: 'cloak', pal: { m: '#4a3a2a', y: '#e0c070' }, hp: 125, atk: 13, def: 5, interval: 1.3, range: 24, speed: 24, exp: 18, money: 14, weapon: 'whip' },
+  nh_hammer:    { name: '망치',        sprite: 'human', pal: { h: '#3a2a1a', c: '#6a5a3a', p: '#2a1e14', s: '#d0a888' }, hp: 1150, atk: 33, def: 10, interval: 1.5, range: 30, speed: 20, exp: 210, money: 380, weapon: 'hammer', boss: true, scale: 1.7, ab: 'nh_zeal' },
+  nh_inquisitor:{ name: '심문관',      sprite: 'human', pal: { h: '#2a2018', c: '#e8e0c8', p: '#3a2e20', s: '#d8b494' }, hp: 230, atk: 25, def: 9, interval: 1.2, range: 26, speed: 28, exp: 34, money: 30, weapon: 'hammer' },
+  nh_brander:   { name: '낙인꾼',      sprite: 'cloak', pal: { m: '#3a2a1e', y: '#ff9a3a' }, hp: 210, atk: 24, def: 9, interval: 1.3, range: 24, speed: 26, exp: 34, money: 28, weapon: 'staff' },
+  nh_gross:     { name: '대망치',      sprite: 'human', pal: { h: '#1e1610', c: '#f0e8d0', p: '#2a2018', s: '#c89a78' }, hp: 2900, atk: 54, def: 17, interval: 1.4, range: 32, speed: 18, exp: 480, money: 1000, weapon: 'hammer', boss: true, scale: 1.8, ab: 'nh_verdict' },
+  // 11구 K사 — 앰플
+  k_addict:     { name: '앰플 중독자', sprite: 'human', pal: { h: '#4a5a4a', c: '#3a4a40', p: '#1e2620', s: '#c8d8b8' }, hp: 95, atk: 14, def: 2, interval: 1.0, range: 20, speed: 34, exp: 18, money: 12, weapon: 'knuckle', ab: 'k_ampule' },
+  k_dealer:     { name: '앰플 밀매상', sprite: 'cloak', pal: { m: '#24302a', y: '#9affc0' }, hp: 110, atk: 14, def: 4, interval: 1.3, range: 110, speed: 24, exp: 18, money: 20, weapon: 'gun', ranged: true },
+  k_smuggler:   { name: '밀매 조직 두목', sprite: 'human', pal: { h: '#1a2a20', c: '#2e3a30', p: '#161c18', s: '#c8b098' }, hp: 1100, atk: 32, def: 10, interval: 1.4, range: 30, speed: 20, exp: 210, money: 380, weapon: 'axe', boss: true, scale: 1.7, ab: 'k_overdose' },
+  k_failure:    { name: '과재생 실패작', sprite: 'blob', pal: { m: '#b88a7a', e: '#3aff9a', r: '#8a3a3a' }, hp: 260, atk: 22, def: 6, interval: 1.4, range: 22, speed: 20, exp: 34, money: 22, ab: 'k_ampule' },
+  k_disposal:   { name: 'K사 폐기 담당', sprite: 'human', pal: { h: '#e8e8e8', c: '#d8e4dc', p: '#2a6a4a', s: '#e0bc9c' }, hp: 210, atk: 25, def: 10, interval: 1.2, range: 110, speed: 24, exp: 34, money: 30, weapon: 'gun', ranged: true },
+  k_bloat:      { name: '비대해진 실패작', sprite: 'blob', pal: { m: '#c89a88', e: '#3aff9a', r: '#a03a3a' }, hp: 3200, atk: 48, def: 12, interval: 1.6, range: 30, speed: 14, exp: 480, money: 1000, boss: true, scale: 1.9, ab: 'k_bud' },
+  // 18구 R사 — 클론과 제4무리
+  r_stray:      { name: '버려진 클론', sprite: 'human', pal: { h: '#8a8a8a', c: '#4a4a4e', p: '#2a2a2e', s: '#e0c8b0' }, hp: 100, atk: 15, def: 3, interval: 1.1, range: 22, speed: 30, exp: 18, money: 12, weapon: 'dagger' },
+  r_hound:      { name: '사냥 클론견', sprite: 'dog',   pal: { d: '#5a4a40', e: '#ff7a4a' }, hp: 90, atk: 15, def: 2, interval: 0.9, range: 16, speed: 48, exp: 18, money: 6 },
+  r_alpha:      { name: '무리 우두머리', sprite: 'human', pal: { h: '#3a2a24', c: '#5a3a2e', p: '#241814', s: '#d8b494' }, hp: 1100, atk: 32, def: 10, interval: 1.3, range: 30, speed: 24, exp: 210, money: 380, weapon: 'claw', boss: true, scale: 1.7, ab: 'r_pack' },
+  r_trainee:    { name: '토끼팀 훈련생', sprite: 'human', pal: { h: '#1e1e1e', c: '#34343a', p: '#18181a', s: '#e0bc9c' }, hp: 190, atk: 24, def: 7, interval: 0.9, range: 110, speed: 36, exp: 34, money: 28, weapon: 'gun', ranged: true },
+  r_fawn:       { name: '순록팀 훈련생', sprite: 'cloak', pal: { m: '#6a4a30', y: '#ffc890' }, hp: 220, atk: 20, def: 9, interval: 1.4, range: 100, speed: 24, exp: 34, money: 30, weapon: 'staff', ranged: true, ab: 'r_antler' },
+  r_instructor: { name: '제4무리 교관', sprite: 'human', pal: { h: '#141414', c: '#3a2a24', p: '#1a1412', s: '#d8b494' }, hp: 2800, atk: 52, def: 16, interval: 1.3, range: 32, speed: 22, exp: 480, money: 1000, weapon: 'lance', boss: true, scale: 1.7, ab: 'r_drill' },
+  // K사 — 재생 앰플. 쓰러뜨리지 못하면 상처가 금세 아문다
+  k_guard:   { name: 'K사 경비 직원', sprite: 'human', pal: { h: '#e8e8e8', c: '#f0f4f0', p: '#2a6a4a', s: '#e0bc9c' }, hp: 760, atk: 58, def: 24, interval: 1.2, range: 26, speed: 28, exp: 92, money: 85, weapon: 'shield', ab: 'k_ampule' },
+  k_cleaner: { name: 'K사 적출반', sprite: 'cloak', pal: { m: '#e8f0ec', y: '#3aff9a' }, hp: 600, atk: 74, def: 16, interval: 1.0, range: 24, speed: 34, exp: 92, money: 90, weapon: 'greatsword' },
+  k_excision:{ name: 'K사 적출 부장', sprite: 'human', pal: { h: '#f4f4f4', c: '#ffffff', p: '#1e5a3a', s: '#e8d0c0' }, hp: 9200, atk: 112, def: 34, interval: 1.1, range: 32, speed: 28, exp: 2000, money: 4000, weapon: 'greatsword', boss: true, scale: 1.6, ab: 'k_overdose' },
+  // R사 — 제4무리. 토끼는 빠르게 쏘고, 순록은 무리를 돌보고, 코뿔소는 단단하다
+  r_rabbit:  { name: 'R사 토끼팀', sprite: 'human', pal: { h: '#1a1a1a', c: '#2a2a2e', p: '#141416', s: '#e0bc9c' }, hp: 560, atk: 62, def: 14, interval: 0.8, range: 110, speed: 40, exp: 92, money: 85, weapon: 'gun', ranged: true },
+  r_reindeer:{ name: 'R사 순록팀', sprite: 'cloak', pal: { m: '#5a3a24', y: '#ffb070' }, hp: 680, atk: 50, def: 18, interval: 1.4, range: 100, speed: 26, exp: 92, money: 90, weapon: 'staff', ranged: true, ab: 'r_antler' },
+  r_rhino:   { name: 'R사 코뿔소팀', sprite: 'bot', pal: { m: '#6a6a72', r: '#ff5a2a' }, hp: 11000, atk: 118, def: 48, interval: 1.4, range: 30, speed: 22, exp: 2000, money: 4000, weapon: 'hammer', boss: true, scale: 1.7, ab: 'r_ram' },
+});
 let CITY_ZONES = null;
-function applyZonesFor(outskirts) {
+function applyZonesFor(outskirts, dist) {
   if (!CITY_ZONES) CITY_ZONES = ZONES.slice();
-  ZONES.splice(0, ZONES.length, ...(outskirts ? OUTSKIRTS_ZONES : CITY_ZONES));
+  if (dist == null) dist = (typeof S !== 'undefined' && S && S.district) || 0;
+  const city = CITY_ZONES.slice(), V = DISTRICT_ZONES[dist] || {};
+  for (const i in V) { const b = CITY_ZONES[i]; city[i] = Object.assign({ req: b.req, lvl: b.lvl, fame: b.fame, waveSize: b.waveSize, wing: DISTRICTS[dist].wing, bg: null }, V[i]); }
+  ZONES.splice(0, ZONES.length, ...(outskirts ? OUTSKIRTS_ZONES : city));
 }
 
 // ---------- 흑수화 (전투 중 변신) ----------
@@ -683,3 +789,4 @@ const HEISHOU_LOOK = {
   hb_mi:   { ears: [[0, 1, 1, 2, '#e8e0c0'], [1, 3, 1, 1, '#e8e0c0'], [9, 1, 1, 2, '#e8e0c0'], [8, 3, 1, 1, '#e8e0c0']], wool: [[1, 5, 8, 1, '#f0ece0'], [0, 6, 1, 2, '#f0ece0'], [9, 6, 1, 2, '#f0ece0']] },
   hb_yu:   { ears: [[4, -2, 1, 1, '#ff3a2a'], [5, -1, 2, 1, '#ff3a2a'], [3, -1, 1, 1, '#ff3a2a']], wing: [[-2, 6, 2, 3, '#e8d8c8'], [-3, 7, 1, 2, '#c8b8a8']], coat: '#5a1410' },
 };
+krwEnemies();   // 이 파일에서 마지막으로 추가된 적까지

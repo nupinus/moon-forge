@@ -12,8 +12,8 @@ function rarityCap(b) {
 }
 function rollRarity(b) {
   const g = b.effGrade || 1, cap = rarityCap(b);
-  let p = Math.min(0.62, 0.28 + 0.05 * g + 0.04 * Math.min(4, b.greats || 0));
-  let r = 0;
+  let p = Math.min(0.66, 0.22 + 0.08 * g + 0.04 * Math.min(4, b.greats || 0));
+  let r = g >= 4 ? 1 : 0;   // 4등급 이상 재료는 커먼이 나오지 않는다
   while (r < cap && Math.random() < p) { r++; p *= 0.93; }
   return r;
 }
@@ -25,7 +25,21 @@ function rollRarity(b) {
 // · 등급 보너스 특성: 등급별 보너스
 // · 모든 특성: 단조 6회마다 +1 (개량 포함 누적) · 최대 10
 const TRAIT_MAX = 10, FORGE_PER_LV = 6, FREE_REHEATS = 2;
-function traitLevels(b, F, forgeCount, bonus) {
+// 대성공 각인의 세기: 완성되는 순간 장비 등급의 범위 안에서 정해진다 (등급 상한은 재료가 정한다)
+//                커먼   언커먼  레어   슈퍼레어 유니크  에픽   마스터  그랜드마스터
+const ENGRAVE_RANGE = [[1, 1], [1, 2], [1, 3], [2, 3], [2, 4], [3, 5], [3, 6], [4, 7]];
+// 범위: 등급이 위쪽을 넓히고, 주재료 등급(÷2 올림)이 바닥을 받친다
+function engraveRange(rarity, grade) {
+  const [lo0, hi0] = ENGRAVE_RANGE[Math.max(0, Math.min(ENGRAVE_RANGE.length - 1, rarity || 0))];
+  const lo = Math.max(lo0, Math.ceil((grade || 1) / 2));
+  return [lo, Math.max(hi0, lo)];
+}
+function rollEngraveLv(rarity, grade) {
+  const [lo, hi] = engraveRange(rarity, grade);
+  return lo + Math.min(hi - lo, Math.floor(Math.pow(Math.random(), 1.3) * (hi - lo + 1)));   // 높은 값일수록 조금 드물다
+}
+// engr: 아직 세기가 정해지지 않은 각인(문자열)에 쓸 레벨 — 생략하면 옛 방식(주재료 등급 ÷ 2)
+function traitLevels(b, F, forgeCount, bonus, engr) {
   const tm = {}, add = (k, v) => { tm[k] = (tm[k] || 0) + v; };
   if (b.core) {
     const C = MATERIALS[b.core];
@@ -33,7 +47,7 @@ function traitLevels(b, F, forgeCount, bonus) {
     if (F.kind === 'armor' && STRONG_OF[C.trait]) add('r_' + C.trait, Math.ceil(C.grade / 2));
   }
   const eg = Math.ceil(MATERIALS[b.main].grade / 2);
-  for (const e of b.engraves || []) add(e, eg);
+  for (const e of b.engraves || []) { if (typeof e === 'string') add(e, engr != null ? engr : eg); else add(e.id, e.lv); }
   if (bonus) add(bonus.id, bonus.lv);
   const fb = Math.floor(forgeCount / FORGE_PER_LV);
   for (const k in tm) tm[k] = Math.min(TRAIT_MAX, tm[k] + fb + ((assoc() === 'liu' && (k === 'burn' || k === 'scorch')) ? 1 : 0));
@@ -48,19 +62,16 @@ function gearValue(g) {
   const base = (g.atk || 0) * 8 + (g.def || 0) * 16 + (g.hp || 0) * 1.2;
   const tsum = (g.traits || []).reduce((a, t) => a + t.lv, 0);
   const rar = 1 + 0.2 * (g.rarity || 0);
+  const grd = 1 + 0.2 * Math.max(0, (g.grade || 1) - 1);   // 좋은 재료로 만든 장비는 더 비싸게 팔린다
   const enh = 1 + 0.02 * (g.q || 0) + 0.08 * (g.tier || 0);
   const eff = 1 + 0.12 * tsum + (g.singularity ? 0.6 : 0) + (g.ego ? 0.8 : 0) + (g.epithet ? 0.1 : 0);
-  return Math.max(1, Math.round(base * 0.6 * rar * enh * eff * (F.valueMult || 1) * KRW));
+  return Math.max(1, Math.round(base * 0.6 * rar * grd * enh * eff * (F.valueMult || 1) * KRW));
 }
 
-// b: 합성재료(blank). b.base 가 있으면 기존 장비를 강화한 것 — id·이명·등급을 이어받는다.
-function makeGear(b) {
-  const F = FORMS[b.form], M = MATERIALS[b.main];
-  const g = b.matGrade, q = b.quality;
-  const base0 = b.base;
-  let rarity = base0 && base0.rarity != null ? base0.rarity : (b.preRarity != null ? b.preRarity : rollRarity(b));
-
-  const R = RARITIES[rarity];
+// 합성재료(b)가 지금 단련도로 완성되면 갖게 될 능력치 — 완성(makeGear)과 단조 화면 미리보기가 같은 식을 쓴다
+function gearStats(b, rarity) {
+  const F = FORMS[b.form], g = b.matGrade, q = b.quality, base0 = b.base;
+  const R = RARITIES[rarity || 0];
   const gm = (1 + 0.7 * (g - 1)) * R.mult, qm = qMult(g, q);
   const sg = b.shape ? MATERIALS[b.shape].grade : 0;
   let atk = 0, def = 0, hp = 0;
@@ -72,6 +83,22 @@ function makeGear(b) {
   } else if (F.kind === 'armor') { def = Math.round(F.def * gm * qm + sg * 0.8); hp = Math.round(F.hp * gm * qm + sg * 4); }
   // X사 특수 합금: 성능 1.4배
   if ((base0 ? base0.singularity : b.singularity) === 'x') { atk = Math.round(atk * 1.4); def = Math.round(def * 1.4); hp = Math.round(hp * 1.4); }
+  if (base0 && base0.manifest) { atk = Math.round(atk * 1.25); def = Math.round(def * 1.25); hp = Math.round(hp * 1.25); }   // 개화 E.G.O
+  return { atk, def, hp };
+}
+
+// b: 합성재료(blank). b.base 가 있으면 기존 장비를 강화한 것 — id·이명·등급을 이어받는다.
+function makeGear(b) {
+  const F = FORMS[b.form], M = MATERIALS[b.main];
+  const g = b.matGrade, q = b.quality;
+  const base0 = b.base;
+  let rarity = base0 && base0.rarity != null ? base0.rarity : (b.preRarity != null ? b.preRarity : rollRarity(b));
+
+  const R = RARITIES[rarity];
+  const { atk, def, hp } = gearStats(b, rarity);
+  // 이번에 새긴 각인의 세기를 정한다
+  const fresh = [];
+  b.engraves = (b.engraves || []).map(e => { if (typeof e !== 'string') return e; const o = { id: e, lv: rollEngraveLv(rarity, MATERIALS[b.main].grade) }; fresh.push(o); return o; });
   const tier = tierOf(q);
   // 특성 레벨 = 재료 등급 기반 + 단조 횟수 보너스 (최대 10)
   const forgeCount = (base0 ? (base0.forgeCount || 0) : 0) + (b.strikes || 0);
@@ -80,6 +107,7 @@ function makeGear(b) {
   const tm = traitLevels(b, F, forgeCount, bonus);
   const egoId = base0 ? base0.ego : b.ego;
   if (egoId) tm[EGO[egoId].trait] = Math.min(TRAIT_MAX, (tm[EGO[egoId].trait] || 0) + 3);
+  if (base0 && base0.manifest && base0.mfTrait) tm[base0.mfTrait] = Math.min(TRAIT_MAX, (tm[base0.mfTrait] || 0) + 2);
   const traits = Object.keys(tm).map(id => ({ id, lv: tm[id] }));
   const tsum = traits.reduce((a, t) => a + t.lv, 0);
   const value = gearValue({ form: b.form, atk, def, hp, traits, rarity, q, tier: tierOf(q), singularity: base0 ? base0.singularity : b.singularity, ego: base0 ? base0.ego : b.ego, epithet: base0 && base0.epithet });
@@ -93,8 +121,13 @@ function makeGear(b) {
   const base = b.base;
   return {
     id: base ? base.id : uid(), form: b.form, kind: F.kind, tier, q, atk, def, hp, traits, value,
-    name: (base0 ? base0.ego : b.ego) ? `E.G.O ${EGO[base0 ? base0.ego : b.ego].name}` : `${M.adj} ${F.tiers[tier]}`,
-    epithet: base && base.epithet ? base.epithet : b.greats >= 3 ? pick(EPITHETS) : '',
+    name: base0 && base0.customName ? base0.customName : base0 && base0.manifest ? '개화 E.G.O ' + ((base0 ? base0.ego : b.ego) ? `E.G.O ${EGO[base0 ? base0.ego : b.ego].name}` : `${M.adj} ${F.tiers[tier]}`) : (base0 ? base0.ego : b.ego) ? `E.G.O ${EGO[base0 ? base0.ego : b.ego].name}` : `${M.adj} ${F.tiers[tier]}`,
+    manifest: base0 ? base0.manifest || null : null, mfTrait: base0 ? base0.mfTrait || null : null, mfAb: base0 ? base0.mfAb || null : null,
+    customName: base0 && base0.customName ? base0.customName : null, named: !!(base0 && base0.customName),
+    // 별명: 대성공 횟수(개량은 누적)에 따라 등급이 정해지고, 더 높은 등급에 이르면 새 별명으로 바뀐다
+    ...(() => { const et = epithetTier(b.greats), bt = base && base.epithet ? (base.epithetTier != null ? base.epithetTier : 0) : -1;
+      if (et > bt) return { epithet: pick(EPITHET_TIERS[et].list), epithetTier: et };
+      return { epithet: base && base.epithet ? base.epithet : '', epithetTier: bt >= 0 ? bt : null }; })(),
     color: M.color, accent, grade: g, made: base ? base.made : S.day,
     rarity, bonus, contraband,
     singularity: base0 ? (base0.singularity || null) : (b.singularity || null),
@@ -109,7 +142,7 @@ function makeGear(b) {
     capacity: F.capacity || 0, items: base0 && base0.items ? base0.items : (F.kind === 'pack' ? [] : undefined),
     brand: base ? (base.brand || S.workshopName) : S.workshopName,
     // 재강화를 위한 제작 정보
-    main: b.main, shape: b.shape || null, core: b.core || null, engraves: b.engraves.slice(), greats: b.greats,
+    main: b.main, shape: b.shape || null, core: b.core || null, engraves: b.engraves.slice(), greats: b.greats, freshEngraves: fresh,
   };
 }
 
@@ -128,9 +161,14 @@ function migrateGear(g) {
   }
   if (g.rarity == null) { g.rarity = Math.min(3, Math.max(0, (g.grade || 1) - 1)); g.bonus = null; }
   if (g.forgeCount == null) g.forgeCount = g.q || 0;
+  if (g.engraves && g.engraves.some(e => typeof e === 'string')) { const eg = Math.ceil(MATERIALS[g.main].grade / 2); g.engraves = g.engraves.map(e => typeof e === 'string' ? { id: e, lv: eg } : e); }
   if (g.exp == null) { g.exp = 0; g.reforgeUsed = 0; g.reforgeReady = 0; g.owner = null; g.lastUser = null; }
   const t = tierOf(g.q);
-  if (t !== g.tier) { g.tier = t; g.name = `${MATERIALS[g.main].adj} ${FORMS[g.form].tiers[t]}`; }
+  // 예전 세이브: 지은 이름이 별명 자리에 들어가 있었다 → 장비 이름으로 옮긴다
+  if (g.named && !g.customName && g.epithet) { g.customName = g.epithet.replace(/[「」]/g, ''); g.epithet = ''; }
+  if (g.customName) g.name = g.customName;
+  if (g.epithet && g.epithetTier == null) g.epithetTier = Math.max(0, epithetTier(g.greats || 0));
+  if (t !== g.tier) { g.tier = t; if (!g.customName) g.name = `${MATERIALS[g.main].adj} ${FORMS[g.form].tiers[t]}`; }
   return g;
 }
 
@@ -229,10 +267,10 @@ const Forge = {
       const id = this.slots[k];
       if (id) { S.stock[id]--; if (S.stock[id] <= 0) delete S.stock[id]; }
     }
-    const W = S.wLevel, hp = 2 + Math.ceil(W / 2);
+    const W = S.wLevel, hp = 2 + Math.ceil(W / 2) + facLv('quench');
     this.blank = Object.assign({}, r, {
       main: this.slots.main, shape: this.slots.shape, core: this.slots.core, singularity: sing, ego,
-      quality: 0, hp, maxHp: hp, strikes: 0, maxStrikes: 6 + W, greats: 0, engraves: [],
+      quality: 0, hp, maxHp: hp, strikes: 0, maxStrikes: 6 + W + facLv('anvil'), greats: 0, engraves: [],
     });
     this.slots = { main: null, shape: null, core: null };
     this.strikeLog = [];
@@ -240,6 +278,7 @@ const Forge = {
     this.flash = { text: '합성 완료', color: '#ffb060', life: 1 };
     Sound.synth();
     UI.mark('forge', 'stock');
+    setTimeout(() => Tut.check('blank'), 60);
   },
 
   // ---------- 강화: 보관함의 장비를 다시 모루에 올린다 ----------
@@ -257,7 +296,7 @@ const Forge = {
     S.stock[c.id] -= c.n; if (S.stock[c.id] <= 0) delete S.stock[c.id];
     g.reforgeReady--;                              // 기회는 시작할 때 소모 (파괴돼도 돌아오지 않음)
     S.gear = S.gear.filter(x => x.id !== gid);   // 모루 위로 — 파괴되면 잃는다
-    const W = S.wLevel, hp = 2 + Math.ceil(W / 2);
+    const W = S.wLevel, hp = 2 + Math.ceil(W / 2) + facLv('quench');
     const grades = [MATERIALS[g.main].grade, g.shape ? MATERIALS[g.shape].grade : 0, g.core ? MATERIALS[g.core].grade : 0];
     this.blank = {
       form: g.form, matGrade: MATERIALS[g.main].grade, effGrade: Math.max(...grades),
@@ -282,12 +321,11 @@ const Forge = {
   },
   reheat() {
     if (!this.blank || this.reheatT > 0 || this.lock > 0 || !this.canWork()) return;
-    if (!S.outskirts && districtTaboo().id === 'dusk' && S.time >= 1020) return Game.breakDistrictTaboo('해가 기운 뒤 화로에 불을 지폈다');   // 19구의 금기
     if (this.heat > 0.95) return UI.toast('이미 충분히 달궈져 있습니다');
     this.reheatT = 1.4;
     // 열피로: 같은 작업물을 자주 달굴수록 쇠가 물러진다 (두 번까지는 괜찮다)
     const b = this.blank; b.reheats = (b.reheats || 0) + 1;
-    if (b.reheats > FREE_REHEATS) { b.fatigue = (b.fatigue || 0) + 1; this.flash = { text: '열피로 ' + b.fatigue, color: '#ff8a5a', life: 0.9 }; }
+    if (b.reheats > freeReheats()) { b.fatigue = (b.fatigue || 0) + 1; this.flash = { text: '열피로 ' + b.fatigue, color: '#ff8a5a', life: 0.9 }; }
     Sound.synth();
     UI.mark('forge');
   },
@@ -295,6 +333,7 @@ const Forge = {
     const b = this.blank, W = S.wLevel, n = b.strikes, over = Math.max(0, b.effGrade - (W + 1));
     const p = { destroy: 2, damage: 14, keep: 30, success: 44, great: 10 };
     p.success += W * 2.5; p.great += W * 1.2; p.damage -= W * 2; p.keep -= W * 1.5;
+    p.great += 1.5 * facLv('bench') + SEAL_GREAT * sealCount();   // 정밀 작업대 · 인장
     const mg = ((b.matGrade || 1) + (b.shape ? MATERIALS[b.shape].grade : (b.matGrade || 1))) / 2 - 1;   // 재료 등급(주재료·형태재료 평균)
     p.great += mg * 1.6; p.success += mg * 1.0; p.damage -= mg * 1.4; p.keep -= mg * 1.2;
     p.destroy += n * 1.3 + over * 4; p.damage += n * 3.2 + over * 6; p.success -= n * 3; p.great -= n * 0.8;
@@ -316,7 +355,6 @@ const Forge = {
     if (!this.blank || this.lock > 0 || this.reheatT > 0 || !this.canWork() || Game.paused || UI.modalOpen) return;
     const b = this.blank;
     if (b.strikes >= b.maxStrikes) return UI.toast('더 이상 두드릴 수 없습니다 — 완성하세요');
-    if (!S.outskirts && districtTaboo().id === 'noon' && S.time >= 720 && S.time < 780) return Game.breakDistrictTaboo('정오의 침묵 중에 망치를 내리쳤다');   // 7구의 금기
       const timing = this.heatTier();
     const p = this.probs(timing);
     let r = Math.random() * 100, out = 'keep';
@@ -433,10 +471,13 @@ const Forge = {
       S.fame += f; extra += ` · ${RARITIES[g.rarity].name}! 명성 +${f}`;
     }
     const R = RARITIES[g.rarity];
+    if (g.freshEngraves && g.freshEngraves.length) { const er = engraveRange(g.rarity, MATERIALS[g.main].grade), top = er[1] > er[0] && g.freshEngraves.some(e => e.lv >= er[1]); extra += ` · 각인 ${g.freshEngraves.map(e => `${TRAITS[e.id].name} ${roman(e.lv)}`).join(', ')}${top ? ' (최상)' : ''}`; if (top) this.flash = { text: '최상 각인!', color: '#ffe070', life: 1.4, big: true }; }
+    delete g.freshEngraves;
     const verb = b.base ? `개량 (+${b.startQ} → +${g.q})` : `+${g.q} 완성`;
     addLog(`${auto ? '[마감 직전] ' : ''}[${R.name}] ${g.epithet ? g.epithet + ' ' : ''}${g.name} ${verb}${extra}`, g.rarity >= 4 || g.tier >= 3 ? 'gold' : '');
     if (g.contraband) { save(); Game.clawRaid(g); return; }
     if (!b.base && g.rarity >= NAME_RARITY && !auto) setTimeout(() => UI.showNameGear(g.id, true), 900);
+    if (!auto) setTimeout(() => Tut.check('done'), 80);
     const evolved = b.base && g.tier > prevTier;
     this.flash = b.base
       ? { text: evolved ? '형태 변화!' : '개량 완료', color: TIER_COLORS[g.tier], life: 1.2, big: true }
@@ -1133,6 +1174,7 @@ const Forge = {
           <div class="bname">${b.base ? `<b>개량</b> ${b.base.epithet ? b.base.epithet + ' ' : ''}${b.base.name}` : `${M.adj} ${F.name} 합성재료`} <span class="tierchip" style="color:${TIER_COLORS[tierNow]}">→ ${TIER_NAMES[tierNow]} ${F.tiers[tierNow]}</span></div>
           <div class="brow stepbar"><span class="qnow">단련도 <b class="q">+${b.quality}</b>${b.base ? ` <small class="dim">(시작 +${b.startQ})</small>` : ''}</span>${TIER_STEPS.slice(1).map((s, i) => `<span class="${b.quality >= s ? 'on' : ''}" style="--tc:${TIER_COLORS[i + 1]}">+${s}</span>`).join('')}
             ${nextStep ? `<small class="dim">다음 형태 변화까지 ${nextStep - b.quality}</small>` : '<small class="gold">최종 형태</small>'}</div>
+          ${this.statPreviewHTML(b, F)}
           ${this.traitPreviewHTML(b, F)}
           ${b.base ? '<div class="warnline">⚠ 개량 중 파괴되면 장비를 잃습니다</div>' : ''}
           ${this.contraHint(b)}
@@ -1140,7 +1182,7 @@ const Forge = {
         <div class="forgebox">
           <div class="bstats">
             <div class="bst ${b.hp <= 1 ? 'bad' : b.hp < b.maxHp ? 'warn' : ''}"><label>내구</label><b class="hp">${hearts}</b><small>${b.hp <= 1 ? '한 번 더 상하면 부서짐' : b.hp < b.maxHp ? '손상 ' + (b.maxHp - b.hp) : '온전함'}</small></div>
-            <div class="bst ${b.fatigue ? (b.fatigue >= 3 ? 'bad' : 'warn') : ''}"><label>가열</label><b>${b.fatigue ? '열피로 ' + b.fatigue : (b.reheats || 0) >= FREE_REHEATS ? '무료 소진' : '무료 ' + (FREE_REHEATS - (b.reheats || 0)) + '회'}</b><small>${b.fatigue ? '쇠가 물러졌다' : (b.reheats || 0) >= FREE_REHEATS ? '다음 가열부터 열피로' : '쇠 상태 좋음'}</small></div>
+            <div class="bst ${b.fatigue ? (b.fatigue >= 3 ? 'bad' : 'warn') : ''}"><label>가열</label><b>${b.fatigue ? '열피로 ' + b.fatigue : (b.reheats || 0) >= freeReheats() ? '무료 소진' : '무료 ' + (freeReheats() - (b.reheats || 0)) + '회'}</b><small>${b.fatigue ? '쇠가 물러졌다' : (b.reheats || 0) >= freeReheats() ? '다음 가열부터 열피로' : '쇠 상태 좋음'}</small></div>
             <div class="bst ${b.maxStrikes - b.strikes <= 1 ? 'bad' : ''}"><label>단조 남은 횟수</label><b>${b.maxStrikes - b.strikes}</b><small>최대 ${b.maxStrikes}</small></div>
           </div>
           ${this.forgeCountHTML(b)}
@@ -1155,7 +1197,7 @@ const Forge = {
       }
       ctrl.innerHTML = `
         <button class="big gold" data-act="strike" ${b.strikes >= b.maxStrikes || this.reheatT > 0 ? 'disabled' : ''}>🔨 두드리기 <small class="key">[Space]</small></button>
-        <button class="big fire" data-act="reheat" ${this.reheatT > 0 || b.strikes >= b.maxStrikes ? 'disabled' : ''}>🔥 가열 <small><span class="key">[R] </span>${(b.reheats || 0) < FREE_REHEATS ? `무료 ${FREE_REHEATS - (b.reheats || 0)}회` : '열피로 +1'}</small></button>
+        <button class="big fire" data-act="reheat" ${this.reheatT > 0 || b.strikes >= b.maxStrikes ? 'disabled' : ''}>🔥 가열 <small><span class="key">[R] </span>${(b.reheats || 0) < freeReheats() ? `무료 ${freeReheats() - (b.reheats || 0)}회` : '열피로 +1'}</small></button>
         <button class="big" data-act="finish" ${this.reheatT > 0 ? 'disabled' : ''}>완성</button>`;
       return;
     }
@@ -1193,7 +1235,8 @@ const Forge = {
         ${core ? `<div>속성: <span class="trait" style="--tc:${core.color}">${core.name}</span> <small class="dim">${F.kind === 'weapon' ? core.w : core.a}</small></div>` : ''}
         ${risk}</div>`;
     }
-    const tabs = `<div class="ftabs">
+    if (!feat('enhance')) this.mode = 'craft';   // 개량은 필요해질 때 열린다
+    const tabs = !feat('enhance') ? '' : `<div class="ftabs">
         <button class="${this.mode === 'craft' ? 'on' : ''}" data-act="forgeMode" data-m="craft">새로 제작</button>
         <button class="${this.mode === 'enhance' ? 'on' : ''}" data-act="forgeMode" data-m="enhance">개량 <small>${S.gear.filter(g => g.reforgeReady > 0).length || ''}</small></button>
       </div>`;
@@ -1201,15 +1244,14 @@ const Forge = {
       S.gear.forEach(migrateGear);
       const list = S.gear.slice().sort((a, b) => (b.reforgeReady || 0) - (a.reforgeReady || 0) || b.q - a.q);
       body.innerHTML = `${tabs}
-        <p class="dim small">전투로 장비 <b>경험치가 100%</b>가 되면 <b>개량 기회</b>가 생깁니다(레어 1회, 등급이 오를수록 +1). 개량하면 경험치를 쌓은 해결사에게 <b>귀속</b>되어, 다른 사람이 쓰면 능력치 60%·특성 봉인. <b>+5 · +10 · +20 · +30</b>에서 모양이 바뀌고, 파괴되면 장비를 잃습니다.</p>
         <div class="enhlist">${list.length ? list.map(g => {
           const c = this.enhanceCost(g), have = S.stock[c.id] || 0;
           const ready = g.reforgeReady || 0, ok = ready > 0 && have >= c.n && this.canWork();
           const nx = TIER_STEPS[g.tier + 1];
-          const why = reforgeMax(g) === 0 ? '개량 불가 등급' : ready > 0 ? `개량 기회 ${ready}회 · 필요: ${MATERIALS[c.id].name} ${c.n}개 (보유 ${have})${have < c.n ? (MARKET_TIERS.flat().includes(c.id) ? ' — 마감 후 시장에서 살 수 있습니다' : ' — 현장에서 구해야 합니다') : ''}` : reforgeLeft(g) > 0 ? `경험치 ${Math.floor(g.exp || 0)}% — 전투로 채우세요` : '개량 기회를 모두 사용함';
+          const why = reforgeMax(g) === 0 ? '개량 불가 등급' : ready > 0 ? `개량 기회 ${ready}회 · 필요: ${MATERIALS[c.id].name} ${c.n}개 (보유 ${have})` : reforgeLeft(g) > 0 ? `경험치 ${Math.floor(g.exp || 0)}%` : '개량 기회를 모두 사용함';
           return gearHTML(g, { extra: `<div class="enhrow"><span class="dim">${why}${nx ? ` · 다음 형태 +${nx}` : ' · 최종 형태'}</span>
             <button class="gold" data-act="enhance" data-gid="${g.id}" ${ok ? '' : 'disabled'}>개량</button></div>` });
-        }).join('') : '<div class="empty">보관함에 장비가 없습니다. 인원이 착용 중인 장비는 마감 때 해제해야 개량할 수 있습니다.</div>'}</div>`;
+        }).join('') : '<div class="empty">보관함에 장비가 없습니다.</div>'}</div>`;
       ctrl.innerHTML = '';
       return;
     }
@@ -1238,12 +1280,27 @@ const Forge = {
       })()}`;
     ctrl.innerHTML = `<button class="big gold" data-act="synth" ${r.error || !this.canWork() ? 'disabled' : ''}>⚗ 합성</button>`;
   },
+  // 지금 완성하면 갖게 될 최종 능력치
+  statPreviewHTML(b, F) {
+    const known = b.base ? b.base.rarity : b.preRarity;
+    const st = gearStats(b, known != null ? known : 0), up = known == null ? '<i class="up">↑</i>' : '';
+    const cells = [];
+    if (st.atk) cells.push(['공격력', st.atk + up]);
+    if (st.def) cells.push(['방어', st.def + up]);
+    if (st.hp) cells.push(['체력', '+' + st.hp + up]);
+    if (F.kind === 'weapon') cells.push(['공속', F.interval + 's']);
+    if (F.capacity) cells.push(['수납', F.capacity + '칸']);
+    return `<div class="finalstats">${cells.map(([k, v]) => `<span><small>${k}</small><b>${v}</b></span>`).join('')}</div>`;
+  },
   traitPreviewHTML(b, F) {
     const fc = (b.base ? (b.base.forgeCount || 0) : 0) + b.strikes;
-    const tm = traitLevels(b, F, fc, b.base ? b.base.bonus : null);
-    const left = FORGE_PER_LV - (fc % FORGE_PER_LV);
-    const chips = Object.keys(tm).map(id => { const T = TRAITS[id];
-      return `<span class="trait ${T.strong ? 'strong' : T.res ? 'res' : ''}" style="--tc:${T.color}">${T.strong ? '⚠' : T.res ? '🛡' : ''}${T.name} Lv${tm[id]}</span>`; }).join('');
+    // 각인 세기는 완성 때 등급으로 정해진다 — 지금 노릴 수 있는 범위를 보여 준다
+    const rLo = b.base ? b.base.rarity : 0, rHi = b.base ? b.base.rarity : rarityCap(b);
+    const mg = MATERIALS[b.main].grade;
+    const tm = traitLevels(b, F, fc, b.base ? b.base.bonus : null, engraveRange(rLo, mg)[0]);
+    const th = traitLevels(b, F, fc, b.base ? b.base.bonus : null, engraveRange(rHi, mg)[1]);
+    const chips = Object.keys(th).map(id => { const T = TRAITS[id], lo = tm[id] || 0, hi = th[id];
+      return `<span class="trait ${T.strong ? 'strong' : T.res ? 'res' : ''}" style="--tc:${T.color}">${T.strong ? '⚠' : T.res ? '🛡' : ''}${T.name} ${lo === hi ? roman(hi) : roman(lo) + '~' + roman(hi)}</span>`; }).join('');
     return `<div class="brow">특성: ${chips || '<span class="dim">없음</span>'}</div>`;
   },
   forgeCountHTML(b) {

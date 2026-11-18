@@ -16,7 +16,9 @@ function abnoArt(k) {
 }
 const zoneBgCache = {};
 function zoneBgImage(i) {
-  const key = (S && S.outskirts ? 'o' : 'z') + i;
+  const z = ZONES[i];
+  if (z && z.bg === null) return null;   // 아직 그림이 없는 지역은 팔레트로 그린다
+  const key = z && z.bg ? z.bg : (S && S.outskirts ? 'o' : 'z') + i;
   let e = zoneBgCache[key];
   if (!e) { e = zoneBgCache[key] = { img: new Image(), ok: false }; e.img.onload = () => { e.ok = true; }; e.img.src = 'assets/bg/' + key + '.png'; }
   return e.ok ? e.img : null;
@@ -30,6 +32,8 @@ const Hunt = {
     this.units = []; this.enemies = []; this.floaters = []; this.tracers = [];
     this.camX = 0; this.wave = 0; this.spawnCd = 2; this.zone = S.zone; this.ended = ''; this.announce = null; this.brotherUsed = false;
     this.radio = []; this.radioDirty = true;
+    this.wave = S.huntWave || 0;   // 새로고침해도 웨이브 진행은 이어진다
+    if (S.huntEnded) { this.active = false; this.ended = S.huntEnded; UI.mark('partyStruct'); return; }   // 철수·전원 이탈한 날은 다시 나가지 않는다
     const ids = S.party.filter(id => { const f = getFixer(id); return f && isAvailable(f); });
     ids.slice(0, MAX_PARTY).forEach((id, i) => this.units.push(this.makeUnit(getFixer(id), i)));
     this.active = this.units.length > 0;
@@ -54,11 +58,12 @@ const Hunt = {
   },
   syncHp() { for (const u of this.units) if (!u.dead || u.withdrawn) u.f.curHp = Math.max(1, Math.round(u.hp)); },
   stop(reason) {
-    if (this.active) { this.active = false; this.ended = reason || '귀환'; }
+    if (this.active) { this.active = false; this.ended = reason || '귀환'; if (S && !this.special) S.huntEnded = this.ended; }
     this.syncHp();
   },
   retreat() {
     if (!this.active || this.special) return;
+    { const why = tabooBreach('retreat'); if (why) Game.breakDistrictTaboo(why); }
     this.stop('철수 완료 — 오늘은 더 이상 출동하지 않습니다');
     addLog('현장 인원이 철수했다.', '');
   },
@@ -74,6 +79,7 @@ const Hunt = {
   spawnWave() {
     const z = ZONES[this.zone];
     this.wave++;
+    if (!this.special) S.huntWave = this.wave;
     const mult = 1 + (this.wave - 1) * 0.035;
     const bx = this.camX + this.W + 20;
     if (this.wave % 6 === 0) {
@@ -90,7 +96,7 @@ const Hunt = {
       this.enemies.push(e);
       this.announce = { text: `⚠ ${e.name}`, life: 2.6, color: BLACKWATER[b.bw].color };
       UI.huntAlert(`${e.name}이(가) 나타났다`, 'bad');
-    } else if (this.wave >= 2 && Math.random() < ABNO_CHANCE) {
+    } else if (this.wave >= 2 && Math.random() < ABNO_CHANCE * (!S.outskirts && district().wing === 'L사' ? 2 : 1)) {
       // 환상체 출현 (매우 드묾)
       const lv = S.outskirts ? 4 : zoneLv(this.zone);
       const pool = ABNO_KEYS.filter(k => lv >= ABNO_RISK[ENEMIES[k].risk].minLv);   // 깊은 곳일수록 위험한 환상체
@@ -104,7 +110,7 @@ const Hunt = {
       addLog(`현장에 환상체 「${e.name}」이(가) 나타났다.`, 'bad');
       this.radioLog(`⚠ 환상체 「${e.name}」 출현!`, 'bad');
     } else if (this.wave >= 2 && this.fingerAmbush(bx, mult)) {
-      // 적대 핑거의 매복
+      // 적대 손가락의 매복
     } else if (S.middleHunt && this.wave === 3) {
       S.middleHunt = false;
       const e = this.makeEnemy(z.boss, bx + 10, mult * 1.3);
@@ -249,6 +255,7 @@ const Hunt = {
       this.active = false;
       const anyFell = this.units.some(u => !u.withdrawn);
       this.ended = anyFell ? '전원 이탈 — 오늘의 출동 종료' : '전원 후퇴 — 오늘의 출동 종료';
+      S.huntEnded = this.ended;
       addLog(anyFell ? '현장에 남은 인원이 없다. 오늘의 출동 종료.' : '전원 무사히 후퇴했다.', anyFell ? 'bad' : 'warn');
       this.radioLog(anyFell ? '현장에 남은 인원이 없다 — 오늘의 출동 종료.' : '전원 후퇴 — 오늘의 출동 종료.', 'bad');
       UI.huntAlert('오늘의 출동이 끝났습니다', anyFell ? 'bad' : '');
@@ -279,6 +286,11 @@ const Hunt = {
       if (u.stunT > 0) { u.stunT -= dt; u.moving = false; continue; }          // 환상체에게 묶임·잠·빙결
       u.cd -= dt * (u.slowT > 0 ? 0.7 : 1); if (u.slowT > 0) u.slowT -= dt;
       if (u.egoAb && EGO_AB[u.egoAb].tick) EGO_AB[u.egoAb].tick(u, dt, this);
+      // 개화 E.G.O — 위기의 순간에 발현한다 (그날 한 번만 시험받는다)
+      // 위기에 빠질 때마다(한 번 회복했다가 다시 무너질 때도) 낮은 확률로
+      if (u.hp >= u.maxHp * 0.6) u.mfCrisis = false;
+      if (!this.special && !u.mfCrisis && u.hp < u.maxHp * MF_HP && canManifest(u.f)) { u.mfCrisis = true; if (Math.random() < MF_CHANCE) manifestNow(u, this); }
+      for (const MA of mfAbsOf(u)) if (MA.tick) MA.tick(u, dt, this);
       if (u.transformed > 0) { u.transformed -= dt; if (u.transformed <= 0) { u.transformed = 0; this.refreshUnit(u); this.float(u.x, u.y - 44, '흑수화 해제', '#9a9aa8'); UI.mark('partyStruct'); } }
       else if (u.bw && !u.transformUsed && !this.special && u.hp < u.maxHp * 0.5) this.transform(u);   // 위기에 짐승이 깨어난다
       if (u.bl && u.bl.burn) { u.blT = (u.blT || 0) + dt; if (u.blT >= 1) { u.blT -= 1; this.selfHurt(u, u.maxHp * 0.012 * u.bl.burn, TRAITS.scorch.color); if (u.dead) continue; } }
@@ -290,7 +302,7 @@ const Hunt = {
       const laneOff = u.ranged ? 0 : (u.lane || 0) * 12;   // 줄마다 조금씩 뒤에 서서 대각선 진형
       if (tgt && best <= rng + laneOff + (backRow ? 26 : 0)) {
         u.moving = false;
-        if (u.cd <= 0) { this.unitAttack(u, tgt); u.cd = u.interval * (u.egoAb && EGO_AB[u.egoAb].speed ? EGO_AB[u.egoAb].speed(u) : 1); }
+        if (u.cd <= 0) { this.unitAttack(u, tgt); u.cd = u.interval * (u.egoAb && EGO_AB[u.egoAb].speed ? EGO_AB[u.egoAb].speed(u) : 1) * mfAbsOf(u).reduce((m, A) => m * (A.speed ? A.speed(u) : 1), 1); }
       } else if (alive.some(o => o !== u && o.lane === u.lane && !o.moving && o.x > u.x && o.x - u.x < 20)) {
         u.moving = false;
       } else if (u.x - rear < 70 || tgt) {
@@ -388,6 +400,8 @@ const Hunt = {
     if (e.boss && assoc() === 'cinq') dmg *= 1.15;
     const EA = u.egoAb ? EGO_AB[u.egoAb] : null;
     if (EA) { u.eg = u.eg || {}; if (EA.hit) dmg *= EA.hit(u, e, this, dmg); if (EA.pierce) dmg += e.def * 0.6; }   // E.G.O: 환상체 능력의 열화판
+    for (const MA of mfAbsOf(u)) if (MA.hit) dmg *= MA.hit(u, e, this, dmg, crit);   // 개화 E.G.O
+    for (const a of this.units) if (!a.dead) for (const MA of mfAbsOf(a)) if (MA.dealt) MA.dealt(a, dmg);   // 피의 장막
     this.lastHitter = u;
     this.hurtEnemy(e, Math.max(1, dmg - e.def * 0.6 * (u.bw === 'hb_mi' ? (u.transformed ? 0.5 : 0.75) : 1)), crit ? '#ffd84a' : '#ffffff', false, crit);   // 흑수 - 미: 방어 절반 무시
     if (u.cleave) {                                                       // 낫·대검: 휩쓸기
@@ -452,7 +466,7 @@ const Hunt = {
       return;
     }
     S.stats.kills++; S.report.kills++;
-    { const lu = this.lastHitter; if (lu && !lu.dead && lu.egoAb && EGO_AB[lu.egoAb].kill) EGO_AB[lu.egoAb].kill(lu, e, this); }
+    { const lu = this.lastHitter; if (lu && !lu.dead && lu.egoAb && EGO_AB[lu.egoAb].kill) EGO_AB[lu.egoAb].kill(lu, e, this); if (lu && !lu.dead) for (const MA of mfAbsOf(lu)) if (MA.kill) MA.kill(lu, e, this); }
     const live = this.units.filter(u => !u.dead);
     for (const u of live) {
       u.f.kills++;
@@ -475,7 +489,7 @@ const Hunt = {
       S.money += m; S.report.huntMoney += m;
     }
     const z = ZONES[this.zone];
-    if (Math.random() < (S.outskirts ? 0.2 : 0.003)) { const om = pick(OUTSKIRTS_MATS); addIncoming(om, 1); this.float(e.x, e.y - 52, '✦ ' + MATERIALS[om].name, MATERIALS[om].color, true); if (!S.outskirts) addLog(`우연히 외곽 생물의 재료를 얻었다: ${MATERIALS[om].name}`, 'gold'); }
+    if (S.outskirts && Math.random() < 0.2) { const om = pick(OUTSKIRTS_MATS); addIncoming(om, 1); this.float(e.x, e.y - 52, '✦ ' + MATERIALS[om].name, MATERIALS[om].color, true); }   // 아인족의 정수는 외곽에서만
     if (e.berserkOf) {
       S.berserk = (S.berserk || []).filter(b => b.id !== e.berserkOf.id);
       addIncoming(e.berserkOf.bw, 1);
@@ -491,6 +505,7 @@ const Hunt = {
     }
     if (!e.boss) this.radioLog(`${e.name} 처치${got.length ? ' · ' + got.join(', ') : ''}`);
     if (e.d.abno) {
+      if (S.report) S.report.abno = (S.report.abno || 0) + 1;
       addIncoming(e.d.abno, 1);
       S.fame += e.d.abnoFame || 10;
       this.float(e.x, e.y - 70, '✦ ' + MATERIALS[e.d.abno].name, '#ff8ad0', true);
@@ -511,6 +526,10 @@ const Hunt = {
     if (e.boss) {
       const rid = pick(z.rare);
       addIncoming(rid, 1);
+      if (!this.special && !S.outskirts && this.zone >= 3 && Math.random() < RUNE_BOSS_CHANCE) { addIncoming('rune', 1); addLog(`${e.name}이(가) 각인 인두를 떨어뜨렸다.`, 'gold'); }
+      if (!this.special && !S.outskirts && this.zone === ZONES.length - 1 && e.key === z.boss) {   // 둥지 경계의 주인 — 인장
+        const so = sealsOf(); if (!so[S.district]) { so[S.district] = true; addLog(`◆ ${district().name}의 인장을 얻었다.`, 'gold'); UI.huntAlert(`${district().wing} 인장 획득`, 'good'); }
+      }
       const bf = Math.max(1, Math.round(z.fame * HUNT_YIELD * (assoc() === 'cinq' ? 1.5 : 1)));
       S.fame += bf; S.stats.bosses++; S.report.bossKills++;
       for (const u of live) u.f.bosses = (u.f.bosses || 0) + 1;
@@ -536,8 +555,12 @@ const Hunt = {
     let mul = AB && AB.hit ? AB.hit(e, u, this, atk) : 1;
     if (!e.d.ab && this.enemies.some(o => !o.dead && o.d.ab && ABNO_AB[o.d.ab].aura)) mul *= 1.25;   // 노래하는 기계의 노래
     const dmg = Math.round((Math.max(1, Math.round(atk * mul * rand(0.85, 1.15) - (AB && AB.pierce ? 0 : u.def * 0.6))) + ((u.bl && u.bl.rupture) ? u.bl.rupture * 3 : 0)) * (e.d.abno ? (u.abnoTaken || 1) : 1));
-    u.hp -= dmg; u.flash = 0.08;
-    this.float(u.x - 12, u.y - 14, dmg, '#ff6b6b');   // 받는 피해: 몸통 왼쪽 — 머리 위 이름표·번호와 자리를 나눈다
+    let dmg2 = dmg;
+    if (this.units.some(a => a !== u && !a.dead && mfAbsOf(a).some(A => A.guard))) dmg2 *= 0.8;   // 이어진 인연: 곁의 아군
+    for (const MA of mfAbsOf(u)) if (MA.taken) dmg2 = MA.taken(u, dmg2, e, this);
+    dmg2 = Math.round(dmg2);
+    u.hp -= dmg2; u.flash = 0.08;
+    this.float(u.x - 12, u.y - 14, dmg2, '#ff6b6b');   // 받는 피해: 몸통 왼쪽 — 머리 위 이름표·번호와 자리를 나눈다
     const at = u.at;
     if (at.bleed) e.st.bleed += Math.ceil(at.bleed / 2);
     if (at.burn) e.st.burn += Math.ceil(at.burn / 2);
@@ -591,7 +614,14 @@ const Hunt = {
     u.dead = true; u.hp = 0;
     const f = u.f;
     f.curHp = 0;
-    if (Math.random() < (f.blackwater === 'hb_yu' ? 0.6 : 0.25)) {   // 흑수 - 유: 높은 사망률
+    let dies = Math.random() < (f.blackwater === 'hb_yu' ? 0.6 : 0.25);   // 흑수 - 유: 높은 사망률
+    if (dies && S.ampuleToday && !S.ampuleUsed) {   // K사 재생 앰플: 하루 한 번
+      dies = false; S.ampuleUsed = true;
+      this.float(u.x, u.y - 40, 'K사 앰플', '#7affb0', true);
+      addLog(`${f.name}이(가) 숨을 거두려던 순간, K사 재생 앰플이 그를 붙잡았다.`, 'good');
+      UI.huntAlert(`K사 앰플 — ${f.name} 생존`, 'good');
+    }
+    if (dies) {
       fixerDies(f);
       S.report.deaths.push(f.name);
       this.float(u.x, u.y - 40, '사망', '#ff3b3b', true);

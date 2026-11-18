@@ -105,11 +105,20 @@ function matChip(id, n, cls) {
   const m = MATERIALS[id];
   return `<span class="mat ${cls || ''}" style="--mc:${m.color}" title="${esc(matTip(id))}"><i class="g${m.grade}"></i>${m.name}${n != null ? ` <b>×${n}</b>` : ''}</span>`;
 }
+// 무기 특성 레벨 → 실제 수치
+function traitFx(id, lv) {
+  const M = { bleed: `적중마다 출혈 ${lv}`, burn: `적중마다 화상 ${lv}`, rupture: `적중마다 파열 ${lv}`, sinking: `적중마다 침잠 ${lv} (적 공격력 -${lv * 4}%씩)`,
+    tremor: `경직 확률 +${lv * 8}%`, charge: `공격 속도 +${lv * 7}%`, poise: `치명타 +${lv * 6}%`,
+    hemo: `적중마다 출혈 ${lv * 3}`, scorch: `적중마다 화상 ${lv * 3}`, collapse: `적중마다 파열 ${lv * 3}`, abyss: `적중마다 침잠 ${lv * 3}`,
+    quake: `경직 확률 +${lv * 20}%`, overcharge: `공격 속도 +${lv * 15}%` };
+  return M[id] || '';
+}
 function traitChips(g) {
   return g.traits.map(t => {
     const T = TRAITS[t.id], cls = T.strong ? 'strong' : T.res ? 'res' : '';
-    const tip = (g.kind === 'weapon' ? (T.w || T.a) : (T.a || T.w)) || '';
-    return `<span class="trait ${cls}" style="--tc:${T.color}" title="${esc(tip)}">${T.strong ? '⚠' : T.res ? '🛡' : ''}${T.name} Lv${t.lv}</span>`;
+    const fx = g.kind === 'weapon' ? traitFx(t.id, t.lv) : '';
+    const tip = ((g.kind === 'weapon' ? (T.w || T.a) : (T.a || T.w)) || '') + (fx ? ' — ' + fx : '');
+    return `<span class="trait ${cls}" style="--tc:${T.color}" title="${esc(tip)}">${T.strong ? '⚠' : T.res ? '🛡' : ''}${T.name} ${roman(t.lv)}</span>`;
   }).join('');
 }
 // 해결사의 반동 상태 요약 (무기 강화형 특성 vs 방어구 내성)
@@ -139,10 +148,13 @@ function gearStatText(g) {
 function gearHTML(g, o) {
   o = o || {};
   const R = RARITIES[g.rarity || 0];
-  return `<div class="gear r${g.rarity || 0} ${o.big ? 'big' : ''} ${o.cls || ''}" style="--rc:${R.color}" ${o.attrs || ''}>
+  const MA = g.manifest && g.mfAb && typeof MANIFEST_AB !== 'undefined' ? MANIFEST_AB[g.mfAb] : null;
+  const nm = esc(g.name), nameC = g.customName && colorFamilyOf(g.customName) ? colorFamilyOf(g.customName).color : null;
+  return `<div class="gear r${g.rarity || 0} ${g.manifest ? 'mfgear' : ''} ${o.big ? 'big' : ''} ${o.cls || ''}" style="--rc:${R.color}" ${o.attrs || ''}>
     <img class="pix" src="${gearIconURL(g)}" alt="">
     <div class="ginfo">
-      <div class="gname" style="color:${R.color}"><span class="rar">${R.name}</span> ${g.epithet ? `<em${g.named ? ` class="named"${colorFamilyOf(g.epithet) ? ` style="color:${colorFamilyOf(g.epithet).color}"` : ''}` : ''}>${esc(g.epithet)}</em> ` : ''}${g.name} <small style="color:${TIER_COLORS[g.tier]}">+${g.q}</small></div>
+      <div class="gname" style="color:${R.color}"><span class="rar">${R.name}</span> ${g.epithet ? `<em class="ep ep${g.epithetTier || 0}" style="color:${EPITHET_TIERS[g.epithetTier || 0].color}" title="${EPITHET_TIERS[g.epithetTier || 0].name}">${esc(g.epithet)}</em> ` : ''}${g.manifest ? `<span class="rbw" data-t="${nm}"${nameC ? ` style="color:${nameC}"` : ''}>${nm}</span>` : g.customName ? `<span class="named"${nameC ? ` style="color:${nameC}"` : ''}>${nm}</span>` : g.name} <small style="color:${TIER_COLORS[g.tier]}">+${g.q}</small></div>
+      ${MA ? `<div class="mfab"><span class="rbw" data-t="✿ ${MA.name}">✿ ${MA.name}</span> <span class="rbw thin" data-t="${esc(MA.desc)}">${esc(MA.desc)}</span></div>` : ''}
       <div class="gstat">${gearStatText(g)}</div>
       ${g.traits.length ? `<div class="gtraits ${o.fixer && isBoundElse(g, o.fixer) ? 'sealed' : ''}">${traitChips(g)}</div>` : ''}
       ${gearGrowthHTML(g, o.fixer)}
@@ -167,10 +179,19 @@ function gearGrowthHTML(g, fixer) {
   }
   return h;
 }
+// 지금 상태로 개점·마감하면 걸리는 금기 — 한 줄 경고
+function tabooWarn() {
+  if (!S || S.outskirts) return '';
+  const t = districtTaboo().id;
+  if (t === 'fullcrew') { const idle = S.fixers.filter(f => isAvailable(f) && !S.party.includes(f.id)).length, room = MAX_PARTY - S.party.filter(id => { const f = getFixer(id); return f && isAvailable(f); }).length; if (idle && room > 0) return `출동하지 않는 인원 ${Math.min(idle, room)}명`; }
+  if (t === 'voyage' && S.lastZone === S.zone && (S.zoneStreak || 0) >= 3 && ZONES.filter(z => S.oGrade <= z.req).length > 1) return '오늘도 같은 지역이면 나흘째';
+  if (t === 'marketday' && S.day % TAX_PERIOD === 0) return '오늘은 장부의 날';
+  return '';
+}
 function tabooHTML(compact) {
   if (S.outskirts) return '<div class="taboo out">🌫 외곽 — 도시의 금기도, 세금도, 머리의 눈도 닿지 않는 곳</div>';
-  const D = district(), T = D.taboo, n = S.tabooStrikes || 0;
-  if (compact) return `<div class="taboo compact">⚖ ${D.name} 금기: <b>${T.name}</b> <small>${T.short}${n ? ` · 위반 ${n}회` : ""}</small></div>`;   // 2일차부터 아침에는 한 줄
+  const D = district(), T = D.taboo, n = S.tabooStrikes || 0, w = tabooWarn();
+  if (compact) return `<div class="taboo compact">⚖ ${D.name} 금기: <b>${T.name}</b> <small>${T.short}${n ? ` · 위반 ${n}회` : ""}</small>${w ? `<div class="bad">⚠ ${w}${districtTaboo().id === 'fullcrew' ? ' <button class="small" data-act="fillParty">전원 출동</button>' : ''}</div>` : ''}</div>`;   // 2일차부터 아침에는 한 줄
   return `<div class="taboo">⚖ ${D.name} 둥지의 금기: <b>${T.name}</b> <small>${T.desc} · 어기면 금기 사냥꾼이 찾아온다${n ? ` · 지금까지 위반 ${n}회` : ''}</small></div>`;
 }
 function fingerHTML(e) {
@@ -578,10 +599,6 @@ const UI = {
     this.showOverlay(`<div class="card narrow morning">
       <div class="dayno">${S.day}일차</div>
       <h2>아침 · 개점 준비</h2>
-      ${S.day === 1 ? `<div class="card guide"><b>처음이라면</b>
-        <ol><li><b>단조</b> 탭 재료함에서 주재료를 고르세요 — 금속은 무기, 천은 방어구가 됩니다. 다른 재료를 섞으면 무엇이 되는지는 직접 두드려 보며 알아내세요.</li>
-        <li><b>합성</b> 후 쇠가 <b>적열</b>일 때 두드리고, 식으면 <b>가열</b>하세요(너무 자주 달구면 쇠가 물러집니다). 많이 두드릴수록 강해지지만 파괴 위험도 커집니다 — 적당할 때 <b>완성</b>.</li>
-        <li>완성한 장비는 <b>의뢰</b> 탭에서 납품해 돈·명성을 벌고, 마감 후 <b>인원·장비</b>에서 해결사에게 쥐여 주세요. 해결사가 현장에서 모은 재료는 다음 날 들어옵니다.</li></ol></div>` : ''}
       ${arr.length ? `<h3>어제 수급한 재료가 입고되었습니다</h3><div class="chips">${arr.map(id => matChip(id, m.arrived[id])).join('')}</div>` : S.day > 1 ? '<p class="dim">새로 입고된 재료가 없습니다.</p>' : ''}
       ${m.wages ? `<p>해결사 급여 지급: <b class="bad">-${fmtMoney(m.wages)}</b></p>` : ''}
       ${S.money < 0 ? '<p class="warnline">자금이 마이너스입니다! 고용·구매·승급을 할 수 없습니다. 의뢰를 납품해 빚을 갚으세요.</p>' : ''}
@@ -592,7 +609,8 @@ const UI = {
       ${m.colors && m.colors.length ? `<p class="gold">🎨 하나 협회 특색 부여: ${m.colors.map(esc).join(', ')}</p>` : ''}
       ${m.resting && m.resting.length ? `<p class="warn">휴식 중: ${m.resting.map(esc).join(', ')}</p>` : ''}
       ${tabooHTML(S.day > 1)}
-      ${(S.morningEvents || []).map(t => `<p class="bad">${esc(t)}</p>`).join('')}
+      ${ampuleHTML()}
+      ${(S.morningEvents || []).map(t => typeof t === 'string' ? `<p class="bad">${esc(t)}</p>` : `<p class="${t.cls || ''}">${esc(t.t)}</p>`).join('')}
       ${m.claw && m.claw.length ? `<p class="bad">☠ 발톱이 다녀갔다: ${m.claw.map(esc).join(', ')}</p>` : ''}
       ${(S.claws || []).length ? `<p class="bad">☠ 머리가 인식한 금기품: ${S.claws.map(c => `「${esc(c.name)}」(${c.due}일차 마감 후)`).join(', ')} — 그때 그것을 가진 자가 처형된다. 창고에 있으면 공방주가 처형된다.</p>` : ''}
       ${m.tax ? (m.tax.paid ? `<p>도시세 납부: <b class="bad">-${fmtMoney(m.tax.paid)}</b></p>` : `<p class="bad">⚠ 도시세 ${fmtMoney(m.tax.due)} 체납 — 머리의 경고 ${m.tax.warn}/${TAX_STRIKES - 1}. 네 번째 체납에는 발톱이 온다.</p>`) : ''}
@@ -607,6 +625,7 @@ const UI = {
       <p>오늘의 의뢰 ${S.orders.length}건 · 보관 장비 ${S.gear.length}개</p>
       <button class="big gold" data-act="openShop">개점 (09:00)</button>
     </div>`, 'phase dim');
+    setTimeout(() => Tut.check('morning'), 30);
   },
 
   // ---------- 마감 화면 ----------
@@ -615,12 +634,14 @@ const UI = {
     this.picker = null;
     this.showOverlay('<div class="closewrap" id="closeWrap"></div>', 'phase');
     this.renderClose();
+    setTimeout(() => Tut.check('close'), 30);
   },
   renderClose() {
     const wrap = this.$('closeWrap'); if (!wrap) return;
-    const tabs = [['report', '결산'], ['roster', '인원·장비'], ['hire', '고용'], ['market', '시장'], ['upgrade', '승급'], ['deploy', '출동 지역'], ['fingers', '관계'], ['hwan', 'H사 환']]
-      .filter(([k]) => k !== 'hwan' || S.wLevel >= SING_UNLOCK_W || S.fixers.some(f => f.blackwater))   // H사 환: 공방 Lv4 전에는 숨김
-      .filter(([k]) => k !== 'fingers' || !S.outskirts);                                                  // 외곽에는 핑거가 없다
+    const tabs = [['report', '결산'], ['roster', '인원·장비'], ['hire', '고용'], ['market', '시장'], ['upgrade', '승급'], ['deploy', '출동 지역'], ['fingers', '관계'], ['hwan', 'H사 환'], ['workshop', '시설'], ['expedition', '원정']]
+      .filter(([k]) => k !== 'hwan' || S.wLevel >= SING_UNLOCK_W || S.fixers.some(f => f.blackwater))
+      .filter(([k]) => (k !== 'workshop' || S.wLevel >= 4) && (k !== 'expedition' || S.wLevel >= 5 || S.home || sealCount()) && (k !== 'hire' || !S.home))   // H사 환: 공방 Lv4 전에는 숨김
+      .filter(([k]) => k !== 'fingers' || (!S.outskirts && feat('fingers')));                                                  // 외곽에는 손가락가 없다
     if (!tabs.some(([k]) => k === this.closeTab)) this.closeTab = 'report';
     const sc = wrap.querySelector('.ctab-body'); const scroll = sc ? sc.scrollTop : 0;
     wrap.innerHTML = `
@@ -777,15 +798,20 @@ const UI = {
         <p class="small">보유: 환 ${S.stock.hwan || 0} · 누름환 ${S.stock.nureum || 0} — 환은 [인원·장비] 탭에서 먹입니다. 누름환은 흑수화한 인원이 매일 아침 하나씩 자동으로 먹습니다(침식 -30).</p>
       </div>
       <div class="card"><h3>흑수환 ${open ? '' : '🔒'}</h3>
-        ${!open ? `<p class="dim">환 제조 숙련이 ${HWAN_SKILL_REQ}에 이르면 열립니다. 외곽 아인족의 정수가 필요합니다 — 도시의 현장에서 아주 드물게, 외곽에서는 흔히 얻습니다.</p>` : `
+        ${!open ? `<p class="dim">환 제조 숙련이 ${HWAN_SKILL_REQ}에 이르면 열립니다. 외곽 아인족의 정수가 필요합니다 — 도시 안에서는 구할 수 없습니다.</p>` : `
         <p class="dim">외곽 아인족의 생물적 특성을 빌린 환. 인원당 한 번, 영구적으로 강해지고 그 지파(자·축·인·묘·사·오·미·유)의 흑수가 된다. 모든 지파는 파열을 다룬다. 대신 침식이 매일 오르고(+12, Q사 괴문자 장비를 지니면 +6), 누름환으로 누르지 못해 100%에 닿으면 이성을 잃고 광폭화해 적이 된다.</p>
         ${mats.length ? mats.map(id => `<div class="hrow"><b style="color:${BLACKWATER[id].color}">${BLACKWATER[id].name}</b> <small class="dim">${BLACKWATER[id].desc}${BLACKWATER[id].side ? ` · <span class="bad">부작용: ${BLACKWATER[id].side}</span>` : ''} · ${MATERIALS[id].name} ${S.stock[id]}개</small>
           <div class="row" style="justify-content:flex-start;margin:4px 0">${S.fixers.filter(f => !f.blackwater).map(f => `<button class="small" data-act="heuksu" data-fid="${f.id}" data-m="${id}" ${S.money < HEUKSU_COST ? 'disabled' : ''}>${esc(f.name)}에게 (${fmtMoney(HEUKSU_COST)})</button>`).join('') || '<span class="dim small">흑수환을 먹일 수 있는 인원이 없다</span>'}</div></div>`).join('') : '<p class="dim">외곽 아인족의 정수가 없다.</p>'}`}
         ${(S.berserk || []).length ? `<p class="bad small">광폭화해 떠난 이: ${S.berserk.map(b => esc(b.name)).join(', ')}</p>` : ''}
       </div></div>`;
   },
+  tab_workshop() { return workshopTabHTML(); },
+  tab_expedition() { return expeditionTabHTML(); },
   tab_fingers() {
-    return `<p class="dim">뒷골목의 정점, 다섯 손가락. 그들의 요구에 어떻게 응하느냐에 따라 관계가 바뀌고, 관계는 매일의 장사에 그대로 돌아옵니다.</p>
+    const kv = S.kRel || 0;
+    const kcard = S.outskirts ? '' : `<div class="card fcard" style="--fc:#7affb0"><h3>K사 <span class="rel">${kv}</span></h3><div class="relbar"><div class="pin" style="left:${kv}%"></div></div>
+      <p class="dim">재생 앰플의 날개. K사 쪽 의뢰를 맡을수록 가까워진다.</p><div class="good small">▲ ${K_REL_NEED} 이상: 개점 전 재생 앰플 계약</div></div>`;
+    return kcard + `<p class="dim">뒷골목의 정점, 다섯 손가락. 그들의 요구에 어떻게 응하느냐에 따라 관계가 바뀌고, 관계는 매일의 장사에 그대로 돌아옵니다.</p>
       <div class="fingers">${FINGER_KEYS.map(k => {
         const F = FINGERS[k], v = rel(k), lab = relLabel(v);
         const pct = (v + 100) / 2;
@@ -851,9 +877,9 @@ const UI = {
   showNameGear(gid, fresh) {
     const g = findGear(Number(gid)); if (!g) return;
     const R = RARITIES[g.rarity];
-    const cur = g.named ? g.epithet.replace(/[「」]/g, '') : '';
+    const cur = g.customName || '';
     this.showModal(`<h2 style="color:${R.color}">${fresh ? R.name + '! ' : ''}이름 짓기</h2>
-      <p>${esc(g.name)} +${g.q} — 마스터 등급 이상의 장비에는 이름을 붙일 수 있습니다.</p>
+      <p>${esc(g.name)} +${g.q}</p>
       <p class="dim small"><i>이름에 깃든 빛깔은, 언젠가 이 장비를 든 자의 이름이 될지도 모른다.</i></p>
       <input id="inGearName" maxlength="12" value="${esc(cur)}" placeholder="이름을 지어 주세요" style="width:100%;margin:6px 0">
       <div class="row"><button data-act="closeModal">나중에</button><button class="gold" data-act="nameGear" data-gid="${g.id}">이름 붙이기</button></div>`);
@@ -871,7 +897,7 @@ const UI = {
       두드릴수록 강해지지만 부서질 위험도 커집니다. 멈출 때를 정하는 것도 대장장이의 일입니다.<br>
       어떤 재료가 무엇이 되는지는 직접 섞어 보며 알아내세요.</p>
       <h3>장비</h3>
-      <p>장비에는 등급이 있고, 싸울수록 손에 익어 다시 두드릴(<b>개량</b>) 기회가 생깁니다. 개량한 장비는 그 해결사의 것이 됩니다.</p>
+      <p>장비에는 등급이 있고, 싸울수록 손에 익어 다시 두드릴(<b>개량</b>) 기회가 생깁니다. 개량한 장비는 그 해결사의 것이 되고, 개량 중 부서지면 장비를 잃습니다.</p>
       <h3>현장</h3>
       <p>해결사들은 알아서 싸우고 재료를 모읍니다. 위험하면 물러났다 돌아오지만, 쓰러지면 죽을 수도 있습니다. 모은 재료는 다음 날 들어옵니다.</p>
       <h3>지켜야 할 것</h3>

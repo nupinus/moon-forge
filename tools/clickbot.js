@@ -30,6 +30,10 @@ window.ClickBot = {
   tick() {
     this.ticks++;
     if (!S) { const c = this.$('[data-act="continue"]'); if (c) return this.press(c, '이어하기'); return this.say('게임 없음'); }
+    // 튜토리얼: 읽고 다음
+    { const t = this.$('#tutLayer [data-act="tutNext"]'); if (t) return this.press(t, '튜토리얼 다음'); }
+    // 경매장: 가치보다 싸면 입찰
+    if (typeof Auction !== 'undefined' && Auction.on) { const b = this.$('[data-act="aucBid"]'); if (b && !b.disabled && Auction.leader !== 'me' && Auction.cur < Auction.value && S.money > Auction.cur * 3) return this.press(b, '경매 입찰'); return; }
     // 모달
     if (UI.modalOpen) {
       const m = this.$('#modal');

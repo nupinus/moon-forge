@@ -53,14 +53,25 @@ function fixerBase(f) {
 function district() { return DISTRICTS[Math.min(S.district || 0, DISTRICTS.length - 1)]; }
 function districtTaboo() { return district().taboo; }
 // 지금 시각이 구의 금기 시간대인가 (시계 표시용)
-function tabooTimeNow() {
+function tabooTimeNow() { return false; }   // 시간대 금기는 없앴다 (만드는 시간을 막지 않는다)
+// 구의 금기를 어기게 되는가 — 어긴다면 그 이유. 단조 자체를 막는 금기는 두지 않는다.
+// act: retreat · open(ctx: idle, streak) · market · sellmat · night(ctx: watch, abno)
+function tabooBreach(act, ctx) {
+  if (!S || S.outskirts) return null;
   const t = districtTaboo().id;
-  if (t === 'noon') return S.time >= 720 && S.time < 780;
-  if (t === 'dusk') return S.time >= 1020;
-  return false;
+  ctx = ctx || {};
+  if (t === 'noretreat' && act === 'retreat') return '현장에서 물러섰다';
+  if (t === 'fullcrew' && act === 'open' && ctx.idle > 0) return '나갈 수 있는 자를 남겨 두었다';
+  if (t === 'voyage' && act === 'open' && ctx.streak >= 4 && ZONES.filter(z => S.oGrade <= z.req).length > 1) return '같은 물길로 나흘째 나갔다';   // 갈 곳이 하나뿐이면 봐준다
+  if (t === 'marketday' && act === 'market' && S.day % TAX_PERIOD === 0) return '장부의 날에 시장을 열었다';
+  if (t === 'nowaste' && act === 'sellmat') return '재료를 내다 팔았다';
+  if (t === 'debt' && act === 'night' && (S.preWage != null ? S.preWage : S.money) < 0) return '빚을 진 채 잠들었다';
+  if (t === 'watchabno' && act === 'night' && ctx.abno && !ctx.watch) return '환상체를 쓰러뜨린 밤에 아무도 지키지 않았다';
+  if (t === 'nightwatch' && act === 'night' && ctx.watch) return '밤에 무기를 든 자를 문밖에 세웠다';
+  return null;
 }
 function taxAmount() { return Math.max(100 * KRW, Math.round(Math.max(0, S.money) * 0.08) + ((9 - S.oGrade) * 60 + S.wLevel * 40) * KRW); }
-// 핑거 관계 (-100 ~ 100)
+// 손가락 관계 (-100 ~ 100)
 function rel(k) { return (S.fingers || {})[k] || 0; }
 function addRel(k, d, why) {
   if (!S.fingers) S.fingers = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
@@ -170,6 +181,8 @@ function unitStats(f, wOverride) {
     bw: f.blackwater || null,
     curW: w || null,
     form: w ? w.form : 'fist',
+    manifest: !!((w && w.manifest === f.id) || (a && a.manifest === f.id)),   // 개화 E.G.O — 그 사람에게만
+    mfAbs: [w, a].filter(g => g && g.manifest === f.id && g.mfAb).map(g => g.mfAb),
     egoAb: w && !wBind && w.ego && typeof EGO_AB !== 'undefined' && EGO_AB[w.ego] ? w.ego : null,   // E.G.O 장비의 능력
     wColor: w ? w.color : null,
     stagger: (F && F.stagger ? F.stagger : 0) + (f.blackwater === 'hb_o' ? 0.06 : 0),
@@ -182,6 +195,7 @@ function unitStats(f, wOverride) {
     wt, at,
   };
   if (F && F.crit && !wBind) st.crit = Math.min(0.7, st.crit + F.crit);
+  if (typeof MANIFEST_AB !== 'undefined') for (const k of st.mfAbs) { const A = MANIFEST_AB[k]; if (!A) continue; if (A.crit) st.crit = Math.min(0.8, st.crit + A.crit); if (A.stats) A.stats(st); }
   // 특색 효과 (보조 — 힘의 중심은 장비)
   if (ck === 'red') st.atk = +(st.atk * 1.05).toFixed(1);
   if (ck === 'blue') st.interval = +(st.interval * 0.95).toFixed(2);
@@ -219,15 +233,21 @@ function genOrders() {
   for (let i = 0; i < n; i++) {
     const form = pick(forms), F = FORMS[form];
     const stat = F.kind === 'weapon' ? 'atk' : 'def';
-    const g = randInt(1, Math.min(5, W));
-    const q = randInt(1, 4) + Math.floor(W / 2);
+    // 의뢰인: 공방 등급까지 열린 층 중에서, 높은 층일수록 자주 — 3단계 아래 층은 더 오지 않는다
+    const tiers = CLIENT_TIERS.filter(T => T.w <= W && T.w > W - 3);
+    const T = weightedPick(Object.fromEntries(tiers.map((t, i) => [i, 1 + i * 1.5])));
+    const CT = tiers[T];
+    // 낮은 등급 의뢰는 공방이 커질수록 줄어든다
+    const g = randInt(Math.max(1, Math.min(5, CT.w) - 1), Math.min(5, W));
+    const q = randInt(1, 4) + Math.floor(W / 2) + (CT.w >= 4 ? 1 : 0);
     const req = Math.max(1, Math.round(F[stat] * (1 + 0.7 * (g - 1)) * (1 + 0.12 * q)));
     const money = Math.round((stat === 'atk' ? req * 14 : req * 26) * rand(0.9, 1.3) + 25 * g);
-    const fame = 1 + g + randInt(0, 2);
+    const fame = 1 + g + randInt(0, 2) + CT.fame;
     let bonus = (F.valueMult || 1) < 1 ? 0.6 : 1;   // 총은 싸다
     if (assoc() === 'zwei' && F.kind === 'armor') bonus = 1.5;
     if (assoc() === 'shi' && form === 'sword') bonus = 1.5;
-    S.orders.push({ id: uid(), form, stat, req, money: Math.round(money * bonus * KRW), fame, done: false, client: pick(CLIENTS) });
+    const client = pick(CT.list).replace('{wing}', S.outskirts ? '외곽' : district().wing);
+    S.orders.push({ id: uid(), form, stat, req, money: Math.round(money * bonus * CT.mult * KRW), fame, done: false, client, tier: CT.w });
   }
 }
 // 의뢰 조건을 채우는 장비 전부 (값 싼 순)
@@ -283,7 +303,7 @@ function newGame(wName, oName, dist) {
     v: 1, workshopName: wName, officeName: oName, day: 1, phase: 'morning', time: 540,
     money: 500 * KRW, fame: 0, krw: true, wLevel: 1, oGrade: 9,
     stock: { scrap: 6, leather: 4, bone: 2, clot: 1 }, incoming: {},
-    gear: [], fixers: [], memorial: [], party: [], zone: 0, zoneV: 2,
+    gear: [], fixers: [], memorial: [], party: [], zone: 0, zoneV: 2, valueV: 3,
     orders: [], candidates: [], nextId: 1, report: null, log: [],
     stats: { crafted: 0, destroyed: 0, kills: 0, deaths: 0, great: 0, bosses: 0 },
     speed: 1, morning: null, won: false, muted: false, patents: [], assoc: null,
