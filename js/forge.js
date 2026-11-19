@@ -25,6 +25,23 @@ function rollRarity(b) {
 // · 등급 보너스 특성: 등급별 보너스
 // · 모든 특성: 단조 6회마다 +1 (개량 포함 누적) · 최대 10
 const TRAIT_MAX = 10, FORGE_PER_LV = 6, FREE_REHEATS = 2;
+const BUFFER_HP = 4, BUFFER_COST = 3;
+// 연속 성공 콤보: 성공·대성공이 이어질 때마다 대성공 확률 +3%p (최대 +12%p). 유지·손상·파괴면 끊긴다.
+// 늦은 대성공: 여섯 번째 타격부터 터진 대성공은 +3 — 위험을 감수한 만큼 크게 돌려준다.
+const COMBO_STEP = 3, COMBO_MAX = 12, LATE_GREAT_AT = 6;
+function comboBonus(b) { return Math.min(COMBO_MAX, (b && b.combo || 0) * COMBO_STEP); }
+// 합성재료 기본 내구 — 공방 Lv1부터 4라서 처음부터 파괴 보호가 켜진다 (Lv5는 5)
+// 내구로 파괴를 막을지 — 플레이어가 고른다 (기본: 막는다)
+function useBuffer() { return !S || S.useBuffer !== false; }
+// 불완전 개화(공방 Lv3 이후): 작업물 하나에 한 번, 돈을 내고 파괴를 막는다 — 값은 완성될 장비의 예상 가치를 따른다
+function wardOpen() { return !!(S && (S.volatile || shopBloomed())); }
+function wardCost(b) {
+  if (b.base) return Math.max(100 * KRW, Math.round(b.base.value * 0.5 / 10000) * 10000);
+  const qEst = b.quality + Math.max(0, b.maxStrikes - b.strikes) * 1.2, st = gearStats(Object.assign({}, b, { quality: Math.round(qEst) }), 1);
+  const v = gearValue({ form: b.form, atk: st.atk, def: st.def, hp: st.hp, traits: [], rarity: 1, q: Math.round(qEst), tier: tierOf(Math.round(qEst)), grade: b.matGrade });
+  return Math.max(100 * KRW, Math.round(v * 0.6 / 10000) * 10000);
+}
+function baseHp(W) { return Math.max(BUFFER_HP, 2 + Math.ceil(W / 2)); }   // 내구가 4 이상이면 파괴 판정을 내구 3으로 버틴다
 // 대성공 각인의 세기: 완성되는 순간 장비 등급의 범위 안에서 정해진다 (등급 상한은 재료가 정한다)
 //                커먼   언커먼  레어   슈퍼레어 유니크  에픽   마스터  그랜드마스터
 const ENGRAVE_RANGE = [[1, 1], [1, 2], [1, 3], [2, 3], [2, 4], [3, 5], [3, 6], [4, 7]];
@@ -65,7 +82,7 @@ function gearValue(g) {
   const grd = 1 + 0.2 * Math.max(0, (g.grade || 1) - 1);   // 좋은 재료로 만든 장비는 더 비싸게 팔린다
   const enh = 1 + 0.02 * (g.q || 0) + 0.08 * (g.tier || 0);
   const eff = 1 + 0.12 * tsum + (g.singularity ? 0.6 : 0) + (g.ego ? 0.8 : 0) + (g.epithet ? 0.1 : 0);
-  return Math.max(1, Math.round(base * 0.6 * rar * grd * enh * eff * (F.valueMult || 1) * KRW));
+  return Math.max(1, Math.round(base * 0.47 * rar * grd * enh * eff * (F.valueMult || 1) * KRW));
 }
 
 // 합성재료(b)가 지금 단련도로 완성되면 갖게 될 능력치 — 완성(makeGear)과 단조 화면 미리보기가 같은 식을 쓴다
@@ -84,6 +101,7 @@ function gearStats(b, rarity) {
   // X사 특수 합금: 성능 1.4배
   if ((base0 ? base0.singularity : b.singularity) === 'x') { atk = Math.round(atk * 1.4); def = Math.round(def * 1.4); hp = Math.round(hp * 1.4); }
   if (base0 && base0.manifest) { atk = Math.round(atk * 1.25); def = Math.round(def * 1.25); hp = Math.round(hp * 1.25); }   // 개화 E.G.O
+  { const rn = 1 + workshopRenown(S.wLevel); if (rn > 1) { atk = Math.round(atk * rn); def = Math.round(def * rn); hp = Math.round(hp * rn); } }   // 공방의 이름값
   return { atk, def, hp };
 }
 
@@ -267,7 +285,7 @@ const Forge = {
       const id = this.slots[k];
       if (id) { S.stock[id]--; if (S.stock[id] <= 0) delete S.stock[id]; }
     }
-    const W = S.wLevel, hp = 2 + Math.ceil(W / 2) + facLv('quench');
+    const W = S.wLevel, hp = baseHp(W) + Math.min(1, facLv('quench'));
     this.blank = Object.assign({}, r, {
       main: this.slots.main, shape: this.slots.shape, core: this.slots.core, singularity: sing, ego,
       quality: 0, hp, maxHp: hp, strikes: 0, maxStrikes: 6 + W + facLv('anvil'), greats: 0, engraves: [],
@@ -296,7 +314,7 @@ const Forge = {
     S.stock[c.id] -= c.n; if (S.stock[c.id] <= 0) delete S.stock[c.id];
     g.reforgeReady--;                              // 기회는 시작할 때 소모 (파괴돼도 돌아오지 않음)
     S.gear = S.gear.filter(x => x.id !== gid);   // 모루 위로 — 파괴되면 잃는다
-    const W = S.wLevel, hp = 2 + Math.ceil(W / 2) + facLv('quench');
+    const W = S.wLevel, hp = baseHp(W) + Math.min(1, facLv('quench'));
     const grades = [MATERIALS[g.main].grade, g.shape ? MATERIALS[g.shape].grade : 0, g.core ? MATERIALS[g.core].grade : 0];
     this.blank = {
       form: g.form, matGrade: MATERIALS[g.main].grade, effGrade: Math.max(...grades),
@@ -325,6 +343,7 @@ const Forge = {
     this.reheatT = 1.4;
     // 열피로: 같은 작업물을 자주 달굴수록 쇠가 물러진다 (두 번까지는 괜찮다)
     const b = this.blank; b.reheats = (b.reheats || 0) + 1;
+    if ((b.mends || 0) < facLv('furnace') && b.hp < b.maxHp) { b.mends = (b.mends || 0) + 1; b.hp++; }   // 개량 화로: 달구며 갈라진 곳을 메운다
     if (b.reheats > freeReheats()) { b.fatigue = (b.fatigue || 0) + 1; this.flash = { text: '열피로 ' + b.fatigue, color: '#ff8a5a', life: 0.9 }; }
     Sound.synth();
     UI.mark('forge');
@@ -336,12 +355,13 @@ const Forge = {
     p.great += 1.5 * facLv('bench') + SEAL_GREAT * sealCount();   // 정밀 작업대 · 인장
     const mg = ((b.matGrade || 1) + (b.shape ? MATERIALS[b.shape].grade : (b.matGrade || 1))) / 2 - 1;   // 재료 등급(주재료·형태재료 평균)
     p.great += mg * 1.6; p.success += mg * 1.0; p.damage -= mg * 1.4; p.keep -= mg * 1.2;
-    p.destroy += n * 1.3 + over * 4; p.damage += n * 3.2 + over * 6; p.success -= n * 3; p.great -= n * 0.8;
+    p.destroy += n * strikeRisk() + over * 4; p.damage += n * 3.2 + over * 6; p.success -= n * 3; p.great -= n * 0.8;
     // 강화 수치가 높을수록 위험 (+30 은 전설)
     const q = b.quality;
     p.destroy += q * 0.14; p.damage += q * 0.35; p.success -= q * 0.3; p.great -= q * 0.1;
     const fz = b.fatigue || 0;                    // 열피로
     p.destroy += fz * 1.5; p.damage += fz * 2.5; p.great -= fz * 1;
+    { const cb = comboBonus(b); if (cb) { p.great += cb; p.keep -= cb / 2; p.success -= cb / 2; } }   // 연속 성공 콤보
     if (timing === 'perfect') { p.great += 14; p.success += 6; p.damage -= 10; p.destroy -= 2; p.keep -= 8; }
     else if (timing === 'miss') { p.damage += 16; p.destroy += 5; p.success -= 14; p.great -= 7; }
     for (const k in p) p[k] = Math.max(k === 'destroy' ? 0.5 : 0, p[k]);
@@ -375,9 +395,10 @@ const Forge = {
     const TL = { perfect: '적열', good: '달궈짐', miss: '식음' }[timing];
     let msg = OUTCOMES[out].name, sparkN = 8, sparkC = '#ffb040';
     if (out === 'great') {
-      b.quality += 2; b.greats++; S.stats.great++; sparkN = 30; sparkC = '#ffe070';
+      const gain = b.strikes >= LATE_GREAT_AT ? 3 : 2; b.lateGreat = gain === 3;
+      b.quality += gain; b.greats++; S.stats.great++; sparkN = 30; sparkC = '#ffe070';
       if (Math.random() < 0.4) { const kind = FORMS[b.form].kind; const tr = rollTrait(kind, kind === 'weapon' ? 0.35 : 0.5); b.engraves.push(tr); msg += ` · 각인「${TRAITS[tr].name}」`; }
-      msg += ' (+2)';
+      msg += ` (+${gain})`;
       Sound.great();
     } else if (out === 'success') {
       b.quality += 1; sparkN = 16; msg += ' (+1)'; Sound.hit(1);
@@ -385,9 +406,15 @@ const Forge = {
       sparkN = 6; Sound.hit(0);
     } else if (out === 'damage') {
       b.hp--; sparkN = 10; sparkC = '#ff7a3a'; msg += ' (내구 -1)'; Sound.bad();
+    } else if (out === 'destroy' && useBuffer() && b.hp >= BUFFER_HP) {   // 내구 완충: 내구가 넉넉하면 부서지는 대신 크게 상한다 (끌 수 있다)
+      b.hp -= BUFFER_COST; out = 'damage'; sparkN = 30; sparkC = '#ff5a3a'; msg = `파괴를 버텼다 (내구 -${BUFFER_COST})`; Sound.bad(); this.saved = true;
+    } else if (out === 'destroy' && b.ward) {                           // 파괴 방지: 값을 치른 한 번
+      b.ward = false; b.wardUsed = true; out = 'keep'; sparkN = 30; sparkC = '#d8a0ff'; msg = '파괴 방지 발동'; Sound.bad(); this.warded = true;
     } else if (out === 'destroy') {
       sparkN = 40; sparkC = '#ff4a3a'; Sound.destroy();
     }
+    b.combo = (out === 'great' || out === 'success') ? (b.combo || 0) + 1 : 0;   // 콤보: 성공이 이어지면 쌓이고 아니면 끊긴다
+    if (b.combo >= 2) msg += ` · 콤보 ${b.combo}`;
     this.strikeLog.unshift({ timing: TL, tcls: timing, out, msg });
     if (this.strikeLog.length > 4) this.strikeLog.length = 4;   // 칸 높이가 고정이라 4줄까지
     this.flash = { text: OUTCOMES[out].name, color: OUTCOMES[out].color, life: 1, big: out === 'great' || out === 'destroy' };
@@ -398,7 +425,9 @@ const Forge = {
     for (let i = 0; i < 3; i++) this.flakes.push({ x: px + rand(-16, 16), y: py + rand(-9, 9), w: i % 2 });
     if (this.flakes.length > 45) this.flakes.splice(0, this.flakes.length - 45);
     this.shake = out === 'destroy' ? 6 : out === 'great' ? 4 : 2;
+    this.outcomeFx(this.warded && out === 'keep' ? 'ward' : out, px, py, b, this.saved); this.saved = false; this.warded = false;
     if (out === 'destroy') this.destroy('망치질 중 합성재료가 산산조각 났다');
+    else if (b.hp <= 0 && b.ward) { b.ward = false; b.wardUsed = true; b.hp = 1; this.warded = true; this.strikeLog[0].msg += ' · 파괴 방지 발동'; this.outcomeFx('ward', px, py, b); }
     else if (b.hp <= 0) this.destroy('손상이 누적되어 합성재료가 부서졌다');
     UI.mark('forge');
   },
@@ -409,7 +438,8 @@ const Forge = {
     const nm = b.base ? `${b.base.name} +${b.startQ}` : `${MATERIALS[b.main].adj} ${FORMS[b.form].name}`;
     this.result = { destroyed: true, reason: b.base ? reason.replace('합성재료', '장비') : reason, name: nm, enhanced: !!b.base };
     this.blank = null;
-    addLog(`${nm} ${b.base ? '개량 실패 — 장비를 잃었다' : '단조 실패'} — ${reason}`, 'bad');
+    const got = onGearDestroyed(b);
+    addLog(`${nm} ${b.base ? '개량 실패 — 장비가 부서졌다' : '단조 실패'} — ${b.base ? reason.replace('합성재료', '장비') : reason}. (${got})`, 'bad');
     save();
   },
 
@@ -476,7 +506,7 @@ const Forge = {
     const verb = b.base ? `개량 (+${b.startQ} → +${g.q})` : `+${g.q} 완성`;
     addLog(`${auto ? '[마감 직전] ' : ''}[${R.name}] ${g.epithet ? g.epithet + ' ' : ''}${g.name} ${verb}${extra}`, g.rarity >= 4 || g.tier >= 3 ? 'gold' : '');
     if (g.contraband) { save(); Game.clawRaid(g); return; }
-    if (!b.base && g.rarity >= NAME_RARITY && !auto) setTimeout(() => UI.showNameGear(g.id, true), 900);
+    if (!b.base && g.rarity >= NAME_RARITY && !auto && !window.BOT_MUTE) setTimeout(() => UI.showNameGear(g.id, true), 900);
     if (!auto) setTimeout(() => Tut.check('done'), 80);
     const evolved = b.base && g.tier > prevTier;
     this.flash = b.base
@@ -487,7 +517,7 @@ const Forge = {
     UI.mark('forge', 'storage', 'orders', 'top');
     save();
   },
-  next() { this.result = null; this.flash = null; this.flakes = []; this.activeSlot = 'main'; UI.mark('forge', 'stock'); },
+  next() { this.result = null; this.flash = null; this.flakes = []; this.fx = []; this.tint = null; this.glow = null; this.activeSlot = 'main'; UI.mark('forge', 'stock'); },
 
   // ---------- 탑뷰 작업대 ----------
   // 캔버스 320x200. 모루 중심(AX, AY)에 작업물이 놓인다.
@@ -495,6 +525,61 @@ const Forge = {
 
   blankLen(b) { return 66 + Math.min(b.quality, 30) * 2.6; },
 
+  // ---------- 결과별 연출: 유지 · 성공 · 대성공 · 손상 · 파괴 보호 · 파괴 ----------
+  outcomeFx(out, px, py, b, saved) {
+    const fx = this.fx = this.fx || [], mc = MATERIALS[b.main].color;
+    const pop = (text, c, big) => fx.push({ k: 'pop', text, c, big, x: px + 26, y: py - 30, life: big ? 1.3 : 0.9, max: big ? 1.3 : 0.9 });
+    const puff = (n, c) => { for (let i = 0; i < n; i++) fx.push({ k: 'puff', x: px + rand(-10, 10), y: py + rand(-4, 4), vx: rand(-14, 14), vy: rand(-16, -4), r: rand(2, 4), c, life: rand(0.4, 0.8), max: 0.8 }); };
+    if (out === 'keep') {                       // 둔한 쇳소리: 잿빛 불꽃 몇 개와 먼지
+      this.sparks.splice(this.sparks.length - 6, 6); this.spawnSparks(5, '#a8a0a0', false, px, py);
+      this.rings[this.rings.length - 1].c = '#8a8288'; puff(4, '120,112,120'); this.shake = 1.2;
+      this.flash = { text: '유지', color: '#a8a0a0', life: 0.7 };
+    } else if (out === 'success') {             // 주황 불꽃이 터지고 작업물이 빛난다
+      this.spawnSparks(10, '#ffd070', false, px, py);
+      this.glow = { c: '255,170,80', life: 0.35, max: 0.35 }; pop('+1', '#ffe0a0'); this.shake = 2.5;
+      if (b.combo >= 2) fx.push({ k: 'pop', text: `콤보 ${b.combo}`, c: '#ffb050', x: px - 30, y: py - 40, life: 0.9, max: 0.9 });
+    } else if (out === 'great') {               // 순간 정지 → 금빛 섬광 · 이중 충격파 · 빛줄기 · 떠오르는 금빛 입자
+      this.hitstop = 0.09;
+      this.tint = { c: '255,220,120', a: 0.42, life: 0.35, max: 0.35 };
+      this.rings.push({ x: px, y: py, r: 2, life: 0.55, c: '#fff4c0' }, { x: px, y: py, r: -14, life: 0.7, c: '#ffcf4a' });
+      for (let i = 0; i < 12; i++) fx.push({ k: 'ray', x: px, y: py, a: i / 12 * Math.PI * 2 + rand(-0.1, 0.1), len: rand(40, 70), life: 0.45, max: 0.45 });
+      for (let i = 0; i < 18; i++) fx.push({ k: 'mote', x: px + rand(-20, 20), y: py + rand(-6, 6), vx: rand(-10, 10), vy: rand(-45, -20), life: rand(0.8, 1.5), max: 1.5 });
+      this.spawnSparks(26, '#ffe070', true, px, py);
+      this.glow = { c: '255,215,110', life: 0.7, max: 0.7 }; pop(b.lateGreat ? '+3' : '+2', b.lateGreat ? '#fff4c0' : '#ffe070', true); this.shake = b.lateGreat ? 6 : 5;
+      if (b.combo >= 2) fx.push({ k: 'pop', text: `콤보 ${b.combo}!`, c: '#ffcf4a', x: px - 30, y: py - 44, life: 1.1, max: 1.1, big: true });
+      if (b.lateGreat) { this.tint.a = 0.55; for (let i = 0; i < 8; i++) fx.push({ k: 'ray', x: px, y: py, a: i / 8 * Math.PI * 2 + 0.2, len: rand(70, 100), life: 0.6, max: 0.6 }); }
+      this.flash = { text: '대성공!', color: '#ffe070', life: 1.2, big: true, bounce: 1 };
+    } else if (out === 'damage' && saved) {     // 파괴 보호: 푸른 방패가 깨진다
+      this.hitstop = 0.07;
+      this.tint = { c: '120,200,255', a: 0.3, life: 0.4, max: 0.4 };
+      this.rings.push({ x: px, y: py, r: 18, life: 0.5, c: '#9ad8ff' });
+      for (let i = 0; i < 14; i++) { const a = rand(0, 7); fx.push({ k: 'shard', x: px + Math.cos(a) * 16, y: py + Math.sin(a) * 10, vx: Math.cos(a) * rand(60, 130), vy: Math.sin(a) * rand(40, 90) - 30, g: 220, rot: rand(0, 6), vr: rand(-10, 10), w: 3, h: 2, c: '#bfe8ff', life: rand(0.5, 0.9), max: 0.9 }); }
+      this.addCracks(px, py, 4); pop('보호!', '#9ad8ff', true); this.shake = 5;
+      this.flash = { text: '파괴 보호', color: '#9ad8ff', life: 1.1, big: true, bounce: 1 };
+    } else if (out === 'damage') {              // 금이 가고, 붉은 불꽃이 아래로 떨어진다
+      this.tint = { c: '255,60,40', a: 0.2, life: 0.25, max: 0.25 };
+      for (let i = 0; i < 10; i++) fx.push({ k: 'shard', x: px, y: py, vx: rand(-60, 60), vy: rand(-40, 10), g: 300, rot: 0, vr: 0, w: 1, h: 1, c: '#ff7a3a', life: rand(0.4, 0.8), max: 0.8 });
+      this.addCracks(px, py, 3); pop('내구 -1', '#ff8a6a'); this.shake = 3.5;
+    } else if (out === 'ward') {                // 파괴 방지: 불완전한 개화가 한 번 감싸 준다
+      this.hitstop = 0.1;
+      this.tint = { c: '200,140,255', a: 0.35, life: 0.45, max: 0.45 };
+      this.rings.push({ x: px, y: py, r: 6, life: 0.6, c: '#d8a0ff' }, { x: px, y: py, r: -10, life: 0.7, c: '#9ad8ff' });
+      for (let i = 0; i < 16; i++) fx.push({ k: 'mote', x: px + rand(-24, 24), y: py + rand(-8, 8), vx: rand(-20, 20), vy: rand(-40, -10), life: rand(0.8, 1.4), max: 1.4 });
+      pop('방지!', '#e0b0ff', true); this.shake = 4;
+      this.flash = { text: '파괴 방지', color: '#d8a0ff', life: 1.2, big: true, bounce: 1 };
+    } else if (out === 'destroy') {             // 긴 정지 → 흰 섬광이 검붉게 → 조각이 날아가 바닥에서 튄다 → 검은 연기
+      this.hitstop = 0.14;
+      this.tint = { c: '255,240,230', a: 0.65, life: 0.18, max: 0.18, then: { c: '120,10,10', a: 0.35, life: 0.6, max: 0.6 } };
+      const L = this.blankLen(b);
+      for (let i = 0; i < 16; i++) fx.push({ k: 'shard', x: this.AX + rand(-L / 2, L / 2), y: this.AY + rand(-3, 3), vx: rand(-150, 150), vy: rand(-170, -40), g: 420, floor: this.AY + 24, rot: rand(0, 6), vr: rand(-16, 16), w: rand(3, 6), h: rand(2, 3), c: i % 3 ? mc : '#3a3236', life: rand(1, 1.6), max: 1.6 });
+      for (let i = 0; i < 10; i++) fx.push({ k: 'puff', x: this.AX + rand(-20, 20), y: this.AY + rand(-6, 4), vx: rand(-20, 20), vy: rand(-26, -8), r: rand(4, 8), c: '30,24,30', life: rand(0.8, 1.4), max: 1.4 });
+      this.rings.push({ x: px, y: py, r: 0, life: 0.6, c: '#8a1a1a' });
+      this.shake = 9; this.flash = { text: '파괴', color: '#ff4a3a', life: 1.4, big: true, shakeText: 1 };
+    }
+  },
+  addCracks(px, py, n) {
+    for (let i = 0; i < n; i++) { const pts = [[px, py]]; let a = rand(0, 7); for (let j = 0; j < 4; j++) { a += rand(-0.8, 0.8); const l = pts[pts.length - 1]; pts.push([l[0] + Math.cos(a) * rand(3, 7), l[1] + Math.sin(a) * rand(1, 4)]); } (this.fx = this.fx || []).push({ k: 'crack', pts, life: 0.9, max: 0.9 }); }
+  },
   spawnSparks(n, color, burst, x, y) {
     const cx = x == null ? this.AX : x, cy = y == null ? this.AY : y;
     for (let i = 0; i < n; i++) {
@@ -509,6 +594,17 @@ const Forge = {
     this.lock = Math.max(0, this.lock - dt);
     if (this.hammerT > 0) { this.hammerT += dt; if (this.hammerT > 0.38) this.hammerT = 0; }
     this.shake = Math.max(0, this.shake - dt * 30);
+    if (this.hitstop > 0) { this.hitstop -= dt; dt = 0; }   // 손맛: 크게 맞은 순간 아주 잠깐 멈춘다
+    if (this.tint) { this.tint.life -= dt; if (this.tint.life <= 0) this.tint = this.tint.then || null; }
+    if (this.glow) { this.glow.life -= dt; if (this.glow.life <= 0) this.glow = null; }
+    for (const f of this.fx || []) {
+      f.life -= dt;
+      if (f.k === 'shard' || f.k === 'mote' || f.k === 'puff') { f.x += f.vx * dt; f.y += f.vy * dt; if (f.g) f.vy += f.g * dt; if (f.vr) f.rot += f.vr * dt;
+        if (f.floor && f.y > f.floor) { f.y = f.floor; f.vy *= -0.35; f.vx *= 0.6; f.vr *= 0.5; }
+        if (f.k === 'puff') { f.r += 6 * dt; f.vx *= 0.95; } if (f.k === 'mote') f.vx += Math.sin((this.t + f.y) * 4) * 6 * dt; }
+      if (f.k === 'pop') f.y -= 14 * dt;
+    }
+    if (this.fx) this.fx = this.fx.filter(f => f.life > 0);
     for (const s of this.sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.vx *= 0.94; s.vy *= 0.94; s.life -= dt; }
     this.sparks = this.sparks.filter(s => s.life > 0);
     for (const r of this.rings) { r.r += 70 * dt; r.life -= dt; }
@@ -605,8 +701,17 @@ const Forge = {
       [[-30, -6], [-18, 4], [-4, -3], [10, 5], [22, -5], [34, 2]].forEach(([x, y], i) => ctx.fillRect(AX + x, AY + y, 5 + (i % 3), 3));
     }
 
+    // 결과 연출 (작업물 위)
+    for (const f of this.fx || []) {
+      const a = Math.max(0, f.life / f.max);
+      if (f.k === 'crack') { ctx.globalAlpha = Math.min(1, a * 1.6); ctx.strokeStyle = '#1a0e0e'; ctx.lineWidth = 2; ctx.beginPath(); f.pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); ctx.strokeStyle = 'rgba(255,120,60,0.6)'; ctx.beginPath(); f.pts.forEach(([x, y], i) => i ? ctx.lineTo(x + 0.5, y + 0.5) : ctx.moveTo(x + 0.5, y + 0.5)); ctx.stroke(); }
+      else if (f.k === 'shard') { ctx.globalAlpha = Math.min(1, a * 2); ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.fillStyle = f.c; ctx.fillRect(-f.w / 2, -f.h / 2, f.w, f.h); ctx.restore(); }
+      else if (f.k === 'puff') { ctx.globalAlpha = a * 0.5; ctx.fillStyle = `rgb(${f.c})`; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1;
     // 파동 · 불꽃
     for (const r of this.rings) {
+      if (r.r <= 0) continue;   // 늦게 퍼지는 두 번째 충격파
       ctx.globalAlpha = Math.max(0, r.life * 2.5); ctx.strokeStyle = r.c; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.6, 0, 0, 7); ctx.stroke();
     }
@@ -632,6 +737,16 @@ const Forge = {
       hgl.addColorStop(0, `rgba(${hcol[0]},${hcol[1]},${hcol[2]},${0.28 * this.heat})`); hgl.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = hgl; ctx.fillRect(AX - rr, AY - rr, rr * 2, rr * 2);
     }
+    if (this.glow && b && !inFurnace) {         // 성공·대성공: 작업물이 빛난다
+      const g = this.glow, a = g.life / g.max, rr = 50 + 30 * (1 - a);
+      const gg = ctx.createRadialGradient(AX, AY, 2, AX, AY, rr); gg.addColorStop(0, `rgba(${g.c},${0.55 * a})`); gg.addColorStop(1, `rgba(${g.c},0)`);
+      ctx.fillStyle = gg; ctx.fillRect(AX - rr, AY - rr, rr * 2, rr * 2);
+    }
+    for (const f of this.fx || []) {
+      const a = Math.max(0, f.life / f.max);
+      if (f.k === 'ray') { const d = 10 + (1 - a) * 30; ctx.strokeStyle = `rgba(255,230,150,${a * 0.8})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(f.x + Math.cos(f.a) * d, f.y + Math.sin(f.a) * d * 0.7); ctx.lineTo(f.x + Math.cos(f.a) * (d + f.len * a), f.y + Math.sin(f.a) * (d + f.len * a) * 0.7); ctx.stroke(); }
+      else if (f.k === 'mote') { ctx.fillStyle = `rgba(255,${200 + Math.round(55 * a)},120,${a})`; ctx.fillRect(Math.round(f.x), Math.round(f.y), 2, 2); }
+    }
     if (this.hitFlash) {
       const h = this.hitFlash, r = 26 * (1 - h.life / 0.14) + 10;
       const hf = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, r);
@@ -646,15 +761,23 @@ const Forge = {
     this.drawHammer(ctx);
     if (!this.vig) { const v = document.createElement('canvas'); v.width = W; v.height = H; const vx = v.getContext('2d'); const vg = vx.createRadialGradient(W / 2, H / 2, 70, W / 2, H / 2, 210); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)'); vx.fillStyle = vg; vx.fillRect(0, 0, W, H); this.vig = v; }
     ctx.drawImage(this.vig, 0, 0);
+    if (this.tint) { const t = this.tint; ctx.fillStyle = `rgba(${t.c},${t.a * Math.max(0, t.life / t.max)})`; ctx.fillRect(-10, -10, W + 20, H + 20); }   // 화면 색: 대성공 금빛 · 손상 붉은빛 · 파괴 흰빛→검붉은빛
+    for (const f of this.fx || []) if (f.k === 'pop') {            // 떠오르는 숫자
+      const a = Math.min(1, f.life / f.max * 2.5), sc = f.big ? 1 + Math.max(0, (f.life - f.max + 0.2) / 0.2) * 0.6 : 1;
+      ctx.font = `${Math.round((f.big ? 16 : 12) * sc)}px Galmuri14, NeoDunggeunmo, monospace`; ctx.textAlign = 'center'; ctx.globalAlpha = a;
+      ctx.fillStyle = '#000'; ctx.fillText(f.text, f.x + 1, f.y + 1); ctx.fillStyle = f.c; ctx.fillText(f.text, f.x, f.y);
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+    }
 
     if (this.flash) {
       const f = this.flash;
-      ctx.font = f.big ? '20px Galmuri14, NeoDunggeunmo, monospace' : '14px NeoDunggeunmo, Galmuri11, monospace';   // 큰 순간(등급 결과·파괴)은 Galmuri14   // 강조: 대성공·파괴 같은 연출
+      const sc = f.bounce ? 1 + Math.max(0, (f.life - (f.bounce ? 0.95 : 0)) / 0.25) * 0.5 : 1;
+      ctx.font = f.big ? `${Math.round(20 * sc)}px Galmuri14, NeoDunggeunmo, monospace` : '14px NeoDunggeunmo, Galmuri11, monospace';   // 큰 순간(등급 결과·파괴)은 Galmuri14   // 강조: 대성공·파괴 같은 연출
       ctx.textAlign = 'center';
-      const y = 30 - (1 - f.life) * 10;
+      const y = 30 - (1 - f.life) * 10, jx = f.shakeText ? rand(-2, 2) * f.life : 0;
       ctx.globalAlpha = Math.min(1, f.life * 2);
-      ctx.fillStyle = '#000'; ctx.fillText(f.text, AX + 1, y + 1); ctx.fillText(f.text, AX - 1, y + 1);
-      ctx.fillStyle = f.color; ctx.fillText(f.text, AX, y);
+      ctx.fillStyle = '#000'; ctx.fillText(f.text, AX + 1 + jx, y + 1); ctx.fillText(f.text, AX - 1 + jx, y + 1);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, AX + jx, y);
       ctx.globalAlpha = 1; ctx.textAlign = 'left';
     }
     if (!b && !this.result) {
@@ -1181,7 +1304,8 @@ const Forge = {
         </div>
         <div class="forgebox">
           <div class="bstats">
-            <div class="bst ${b.hp <= 1 ? 'bad' : b.hp < b.maxHp ? 'warn' : ''}"><label>내구</label><b class="hp">${hearts}</b><small>${b.hp <= 1 ? '한 번 더 상하면 부서짐' : b.hp < b.maxHp ? '손상 ' + (b.maxHp - b.hp) : '온전함'}</small></div>
+            <div class="bst ${b.hp <= 1 ? 'bad' : b.hp < b.maxHp ? 'warn' : ''}"><label>내구</label><b class="hp">${hearts}</b><small>${b.hp <= 1 ? '한 번 더 상하면 부서짐' : b.hp >= BUFFER_HP && useBuffer() ? '파괴 보호' : b.hp < b.maxHp ? '손상 ' + (b.maxHp - b.hp) : '온전함'}</small>
+              <label class="bufopt"><input type="checkbox" data-act="toggleBuffer" ${useBuffer() ? 'checked' : ''}> 내구로 파괴 막기</label></div>
             <div class="bst ${b.fatigue ? (b.fatigue >= 3 ? 'bad' : 'warn') : ''}"><label>가열</label><b>${b.fatigue ? '열피로 ' + b.fatigue : (b.reheats || 0) >= freeReheats() ? '무료 소진' : '무료 ' + (freeReheats() - (b.reheats || 0)) + '회'}</b><small>${b.fatigue ? '쇠가 물러졌다' : (b.reheats || 0) >= freeReheats() ? '다음 가열부터 열피로' : '쇠 상태 좋음'}</small></div>
             <div class="bst ${b.maxStrikes - b.strikes <= 1 ? 'bad' : ''}"><label>단조 남은 횟수</label><b>${b.maxStrikes - b.strikes}</b><small>최대 ${b.maxStrikes}</small></div>
           </div>
@@ -1198,7 +1322,7 @@ const Forge = {
       ctrl.innerHTML = `
         <button class="big gold" data-act="strike" ${b.strikes >= b.maxStrikes || this.reheatT > 0 ? 'disabled' : ''}>🔨 두드리기 <small class="key">[Space]</small></button>
         <button class="big fire" data-act="reheat" ${this.reheatT > 0 || b.strikes >= b.maxStrikes ? 'disabled' : ''}>🔥 가열 <small><span class="key">[R] </span>${(b.reheats || 0) < freeReheats() ? `무료 ${freeReheats() - (b.reheats || 0)}회` : '열피로 +1'}</small></button>
-        <button class="big" data-act="finish" ${this.reheatT > 0 ? 'disabled' : ''}>완성</button>`;
+        <button class="big" data-act="finish" ${this.reheatT > 0 ? 'disabled' : ''}>완성</button>${wardOpen() ? (b.ward ? '<button class="big ward on" disabled>🛡 파괴 방지 중</button>' : b.wardUsed ? '' : `<button class="big ward" data-act="ward" ${S.money < wardCost(b) ? 'disabled' : ''}>🛡 파괴 방지 <small>${fmtMoney(wardCost(b))}</small></button>`) : ''}`;
       return;
     }
     tw.classList.add('hidden');
@@ -1306,7 +1430,8 @@ const Forge = {
   forgeCountHTML(b) {
     const fc = (b.base ? (b.base.forgeCount || 0) : 0) + b.strikes;
     const left = FORGE_PER_LV - (fc % FORGE_PER_LV);
-    return `<div class="fcount" title="특성은 최대 Lv${TRAIT_MAX}">누적 단조 <b>${fc}회</b> · 모든 특성 +1까지 <b>${left}회</b></div>`;
+    const cb = comboBonus(b);
+    return `<div class="fcount" title="특성은 최대 Lv${TRAIT_MAX}">누적 단조 <b>${fc}회</b> · 모든 특성 +1까지 <b>${left}회</b>${b.combo >= 1 ? ` · <span class="combo">콤보 ${b.combo}${cb ? ` (대성공 +${cb}%)` : ''}</span>` : ''}${b.strikes >= LATE_GREAT_AT - 1 ? ' · <span class="late">대성공 +3</span>' : ''}</div>`;
   },
   previewStat(fake, q) {
     const F = FORMS[fake.form], g = fake.matGrade;

@@ -39,16 +39,32 @@ window.Bot = {
     const b = F.blank;
     if (F.contraWarn) { F.finishCancel(); F.blank = null; return; }
     const p = F.probs('perfect');
-    const risky = p.destroy + (b.hp <= 1 ? p.damage : 0);
+    const risky = ((useBuffer() && b.hp >= BUFFER_HP) || b.ward ? 0 : p.destroy) + (b.hp <= 1 && !b.ward ? p.damage : 0);   // 내구가 넉넉하면 파괴는 버틴다
     const T = !S.outskirts && districtTaboo().id;
     let done = b.strikes >= b.maxStrikes || risky > (this.risk || 12) || (T === 'overtime' && S.time > 1040);
     if (done) { F.finish(); return; }
     if (F.lock > 0 || F.reheatT > 0) return;
+    if (!this.noSpend && wardOpen() && !b.ward && !b.wardUsed && b.quality >= 8 && S.money > wardCost(b) * 5) ACT.ward();   // 공들인 작업물엔 파괴 방지
     if (F.heatTier() === 'perfect') { Game.paused = false; F.strike(); Game.paused = true; }
     else F.reheat();
   },
   deliverAll() {
     for (const o of S.orders) if (!o.done) { const l = matchGears(o).sort((a, b) => a.value - b.value); if (l.length) ACT.deliver({ id: o.id, gid: l[0].id }); }   // 여러 개면 가장 싼 것을 낸다
+  },
+  // 후반 지출: 암시장 · 재각인 · 복구 · 공방 개화 (경매는 Auction.autoResolve)
+  spend() {
+    if (typeof BlackMarket !== 'undefined' && BlackMarket.open()) S.bm.items.forEach((x, i) => {
+      const g = MATERIALS[x.id].grade;
+      while (x.n > 0 && ((x.id === 'rune' && (S.stock.rune || 0) < 3 && S.money > x.price * 3) || (x.id !== 'rune' && g >= 4 && S.money > x.price * 4))) ACT.bmBuy({ i });
+    });
+    if (S.wLevel >= 5 && !S.bloomed && !S.home && S.money > SHOP_BLOOM.money * 1.3 && S.fame >= SHOP_BLOOM.fame) ACT.bloomWorkshop();
+    if (shopBloomed()) for (const r of (S.remnants || []).slice()) { if ((S.stock[r.shard] || 0) >= r.need && S.money > restoreCost(r) * 2) ACT.restoreGear({ id: String(r.id) }); }
+    if ((S.stock.rune || 0) > 0) {
+      const g = S.gear.filter(x => (x.engraves || []).length).sort((a, b) => b.value - a.value)[0];
+      if (g) { const best = g.engraves.reduce((m, e, i) => e.lv > g.engraves[m].lv ? i : m, 0); RELOCK[g.id] = new Set(g.engraves.length > 1 ? [best] : []);
+        const c = reengraveCost(g, RELOCK[g.id]); if (S.money > c.money * 3 && (S.stock.rune || 0) >= c.runes) ACT.reengrave({ gid: String(g.id) }); }
+    }
+    UI.hideModal && UI.hideModal();
   },
   closeActions() {
     // 장착: 각 해결사에게 가장 좋은 무기/방어구
@@ -73,6 +89,7 @@ window.Bot = {
     if (wc && S.money >= wc.money + 300000 && S.fame >= wc.fame) ACT.upWorkshop();
     const oc = OFFICE_UP[S.oGrade];
     if (oc && S.money >= oc.money + 300000 && S.fame >= oc.fame) ACT.upOffice();
+    if (!this.noSpend) this.spend();
     // 공방 시설: 여유가 있으면 싼 것부터
     if (typeof FACILITIES !== 'undefined' && !this.noFac) for (const k of Object.keys(FACILITIES).sort((a, b) => FACILITIES[a].cost[0] - FACILITIES[b].cost[0])) {
       const F = FACILITIES[k], lv = facLv(k); if (lv >= F.cost.length || S.wLevel < F.minW) continue;

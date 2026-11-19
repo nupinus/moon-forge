@@ -7,21 +7,97 @@ const M_ = KRW * 1000;   // 100만 안
 
 // ---------- 공방 시설: 단조를 직접 좋게 만든다 (원정 분점에는 없다) ----------
 const FACILITIES = {
-  furnace:   { name: '개량 화로',     fx: '무료 가열 +1',      minW: 4, cost: [6, 18] },
-  quench:    { name: '담금질 수조',   fx: '합성재료 내구 +1',  minW: 4, cost: [7, 20] },
-  anvil:     { name: '강화 모루',     fx: '최대 단조 +1',      minW: 4, cost: [8, 22, 50] },
+  furnace:   { name: '개량 화로',     fx: '가열할 때 내구 +1 (작업마다 단계만큼)', minW: 4, cost: [6, 18] },
+  quench:    { name: '담금질 수조',   fx: '합성재료 내구 +1',  minW: 4, cost: [7] },
+  anvil:     { name: '단련 모루',     fx: '두드릴수록 쌓이는 파괴 위험 감소', minW: 4, cost: [8, 22, 50] },
   bench:     { name: '정밀 작업대',   fx: '대성공 +1.5%',      minW: 5, cost: [10, 28, 60] },
 };
-function facLv(k) { return (S && S.fac && S.fac[k]) || 0; }
-function freeReheats() { return FREE_REHEATS + facLv('furnace'); }
+function facLv(k) { const v = (S && S.fac && S.fac[k]) || 0, F = FACILITIES[k]; return F ? Math.min(v, F.cost.length) : v; }
+function freeReheats() { return FREE_REHEATS; }
+// 단련 모루: 한 번 두드릴 때마다 쌓이는 파괴 위험 (기본 1.3%p)
+function strikeRisk() { return 1.3 - 0.15 * facLv('anvil'); }
 
 // ---------- 인장: 각 구 둥지 경계의 주인을 쓰러뜨리면 얻는다 (수집) ----------
 function sealsOf() { const o = S.home || S; return (o.seals = o.seals || {}); }
 function sealCount() { return Object.keys(sealsOf()).length; }
 const SEAL_GREAT = 0.4, SEAL_SALE = 0.02;   // 인장 하나마다 대성공 +0.4% · 판매가 +2%
 
+// ---------- 잔흔 · 복구 ----------
+// 부서진 장비는 잔흔으로 남는다 — 같은 등급대의 파편을 모아 오면 되살릴 수 있다 (장비마다 한 번). 잔흔은 시장에 팔 수도 있다.
+//  · 개량하다 부서진 장비: 개량을 시작하기 전 모습으로
+//  · 새로 만들다 부서진 장비: 레어 이상으로 굴려졌다면, 넣었던 재료로 (주재료·형태재료·속성재료·E.G.O 추출물)
+// 파편은 장비가 부서질 때마다 그 등급대의 것이 하나 나온다.
+const REMNANT_MIN_RARITY = 2, REMNANT_SELL = 0.3;
+const SHARDS = [
+  { id: 'shard1', name: '잔해 조각',   color: '#9a948e', from: 0 },   // 커먼 · 언커먼
+  { id: 'shard2', name: '단련된 파편', color: '#5fa8ff', from: 2 },   // 레어 · 슈퍼레어
+  { id: 'shard3', name: '명품의 파편', color: '#ff8a3a', from: 4 },   // 유니크 · 에픽
+  { id: 'shard4', name: '전설의 파편', color: '#4af0e0', from: 6 },   // 마스터 · 그랜드마스터
+];
+SHARDS.forEach((T, i) => { MATERIALS[T.id] = { name: T.name, grade: i + 2, cat: 'item', color: T.color, price: 0 }; MAT_ORDER.push(T.id); });
+// ---------- 불완전 개화 (공방 Lv3 이후 첫 개점) ----------
+// 원작의 '불완전한 개화 E.G.O' — 확신이 덜 선 채 반쯤 피어난 자아. 이후 공방 Lv5의 개화가 온전한 발현이다.
+function volatileBloom() {
+  if (S.volatile || S.outskirts || S.home || S.wLevel < 3) return false;
+  S.volatile = true; save();
+  addLog(`✿ 「${S.workshopName}」 공방이 불안정하게 피어났다 — 불완전한 개화.`, 'gold');
+  const el = document.createElement('div'); el.id = 'volatileFx';
+  el.innerHTML = `<div class="vf-glow"></div><div class="vf-petals">${Array.from({ length: 24 }, (_, i) => `<i style="--x:${Math.round(rand(-45, 45))}vw;--d:${rand(0, 1.2).toFixed(2)}s;--h:${i * 15}"></i>`).join('')}</div>
+    <div class="vf-box"><h2 class="vf-title"><span class="rbw" data-t="불완전 개화">불완전 개화</span></h2>
+    <p>개점하려는 순간, 공방이 숨을 들이켰다 — 그리고 반쯤 피어났다.</p>
+    <p class="dim">아직 온전하지 않다. 그래도 작업물 하나에 한 번, 대가를 치르면 부서지려는 것을 붙잡아 준다.</p>
+    <button class="big gold" data-act="volatileOk">확인</button></div>`;
+  document.body.appendChild(el); Sound.great(); Game.paused = true;
+  return true;
+}
+
+// ---------- 공방 개화 ----------
+// 공방 Lv5 이후 마지막 승급. 공방이 공방주의 E.G.O로 피어난다 (원작: 건물로 발현한 개화 E.G.O — 도서관·공방).
+// 개화한 공방에서만 잔흔을 되살릴 수 있다.
+const SHOP_BLOOM = { money: 150 * 1000 * KRW, fame: 1200 };
+function shopBloomed() { return !!(S && (S.home ? S.home.bloomed : S.bloomed)); }
+// 재료 하나의 값어치: 시장가 → 암시장가 → 경매 감정가(E.G.O 추출물) 순으로
+function matWorth(id) {
+  const M = MATERIALS[id]; if (!M) return 0;
+  if (M.price > 0) return M.price;
+  const bm = BM_GOODS.find(x => x.id === id); if (bm) return bm.p * KRW;
+  if (M.cat === 'ego') { const k = ABNO_KEYS.find(a => ENEMIES[a].abno === id), risk = k ? ENEMIES[k].risk : 'HE'; return ({ ZAYIN: 6, TETH: 9, HE: 15, WAW: 26, ALEPH: 45 }[risk] || 10) * M_; }
+  return 100 * KRW;
+}
+// 복구 비용 — 재료로 돌아가는 잔흔: 재료 값어치의 30% / 장비로 돌아가는 잔흔: 판매가 · 단계 · 등급 · 특성(레벨 합·개수) · E.G.O · 개화를 모두 따진다
+function restoreCost(r) {
+  if (r.mats) return Math.round((100 * KRW + Object.entries(r.mats).reduce((a, [id, n]) => a + matWorth(id) * n, 0) * 0.3) / 10000) * 10000;
+  const g = r.gear, tr = g.traits || [], lv = tr.reduce((a, t) => a + t.lv, 0);
+  const c = (300 * KRW + (g.value || 0) * 0.35) * (1 + 0.02 * (g.q || 0)) * (1 + 0.08 * (g.rarity || 0)) * (1 + 0.02 * lv) * (1 + 0.05 * tr.length)
+    * (g.ego ? 1.3 : 1) * (g.manifest ? 1.5 : 1);
+  return Math.round(c / 10000) * 10000;
+}
+function egoMatOf(ego) { return Object.keys(MATERIALS).find(k => MATERIALS[k].ego === ego); }   // E.G.O → 그 추출물 재료
+function shardOf(rarity) { let r = SHARDS[0]; for (const T of SHARDS) if ((rarity || 0) >= T.from) r = T; return r.id; }
+function remnantNeed(g) { return 2 + Math.floor((g.q || 0) / 15); }
+// 부서진 순간 — Forge.destroy에서 부른다
+function onGearDestroyed(b) {
+  const rar = b.base ? (b.base.rarity || 0) : (b.preRarity != null ? b.preRarity : rollRarity(b));
+  const sh = shardOf(rar);
+  S.stock[sh] = (S.stock[sh] || 0) + 1;
+  let note = `${MATERIALS[sh].name} 1`;
+  let g = null, mats = null;
+  if (b.base && !b.base.restored) g = JSON.parse(JSON.stringify(b.base));
+  else if (!b.base && rar >= REMNANT_MIN_RARITY) {          // 새로 만들던 것: 어떤 장비가 될 뻔했는지 보여 주고, 복구하면 넣었던 재료로 돌아간다
+    const snap = JSON.parse(JSON.stringify(Object.assign({}, b, { base: null }))); snap.preRarity = rar; snap.engraves = (b.engraves || []).slice();
+    g = makeGear(snap); delete g.freshEngraves;
+    if (g.contraband) g = null;                              // 금기품이 될 것은 잔흔도 남기지 않는다
+    else { mats = {}; for (const id of [b.main, b.shape, b.core, b.ego ? egoMatOf(b.ego) : null]) if (id) mats[id] = (mats[id] || 0) + 1; }
+  }
+  if (g) {
+    (S.remnants = S.remnants || []).push({ id: uid(), gear: g, mats, shard: sh, need: mats ? 2 : remnantNeed(g), day: S.day });
+    note += ' · 잔흔이 남았다';
+  }
+  return note;
+}
+
 // ---------- 재각인 전용 재료 ----------
-MATERIALS.rune = { name: '각인 인두', grade: 5, cat: 'item', color: '#ff9a4a', price: 0 };
+MATERIALS.rune = { name: '각인 인두', grade: 5, cat: 'item', color: '#ff9a4a', price: 0 };   // 암시장(재각인이 열린 뒤)·보스·경매
 MAT_ORDER.push('rune');
 const RUNE_BOSS_CHANCE = 0.08;   // 4번째 지역부터 보스가 떨어뜨린다
 
@@ -158,21 +234,29 @@ function auctionLots() {
   const L = [];
   const egoOf = risk => ABNO_KEYS.filter(k => ENEMIES[k].risk === risk).map(k => ENEMIES[k].abno);
   if (W >= 2) L.push({ w: 5, items: { blackiron: 3 }, v: 1.2 }, { w: 5, items: { silk: 3 }, v: 1.1 }, { w: 3, items: { ink: 2 }, v: 1.0 }, { w: 3, items: { pendulum: 2 }, v: 1.0 }, { w: 3, items: { meteor: 2 }, v: 0.9 });
-  if (W >= 3) L.push({ w: 4, items: { stigma: 2 }, v: 3.5 }, { w: 4, items: { dawn: 2 }, v: 3.5 }, { w: 3, items: { rune: 1 }, v: 3 }, { w: 2, items: { capacitor: 1 }, v: 2.5 });
+  if (W >= 3) L.push({ w: 4, items: { stigma: 2 }, v: 1.6 }, { w: 4, items: { dawn: 2 }, v: 2 }, { w: 3, items: { rune: 1 }, v: 4 }, { w: 2, items: { capacitor: 1 }, v: 1.4 });
   if (W >= 4) L.push({ w: 2, items: { rune: 3 }, v: 8 }, { w: 2, items: { scope: 1, mechcore: 1 }, v: 4 }, { w: 2, items: { servo: 1, synthskin: 1 }, v: 4 },
     { w: 2, items: { [pick(egoOf('TETH').concat(egoOf('ZAYIN')))]: 1 }, v: 9 }, { w: 1, items: { [pick(egoOf('HE'))]: 1 }, v: 15 });
-  if (W >= 5 && deep >= 2.5) L.push({ w: 1, items: { [pick(egoOf('WAW'))]: 1 }, v: 26 }, { w: 1, items: { stigma: 3, dawn: 3, capacitor: 2 }, v: 14 });
+  if (W >= 5 && deep >= 2.5) L.push({ w: 1, items: { [pick(egoOf('WAW'))]: 1 }, v: 26 }, { w: 1, items: { stigma: 3, dawn: 3, capacitor: 2 }, v: 6.5 });
   if (W >= 5 && deep >= 3.5) L.push({ w: 0.5, items: { [pick(egoOf('ALEPH'))]: 1 }, v: 45 });
   const minV = W >= 5 ? 3 : W >= 4 ? 1 : 0;   // 공방이 크면 싼 물건은 오르지 않는다
   return L.filter(l => l.v >= minV);
 }
+// 경매는 정해진 날 마감 때 열린다. 다음 경매 날짜와 출품작은 [경매] 탭에서 미리 볼 수 있다.
+function pickLot() { const lots = auctionLots(); if (!lots.length) return null; const l = lots[weightedPick(Object.fromEntries(lots.map((x, i) => [i, x.w])))]; return { items: Object.assign({}, l.items), v: l.v }; }
 const Auction = {
   on: false,
-  chance() { return S.outskirts ? 0 : Math.min(0.2, 0.03 + 0.03 * S.wLevel); },
-  roll() { if (S.wLevel < 2 || Math.random() >= this.chance()) return false; this.open(); return true; },
-  open() {
-    const lots = auctionLots(); if (!lots.length) return;
-    const lot = lots[weightedPick(Object.fromEntries(lots.map((l, i) => [i, l.w])))];
+  // 다음 경매: 공방이 클수록 자주 (Lv2 5~8일 · Lv5 3~6일마다)
+  plan() { const W = S.wLevel, lot = pickLot(); if (!lot) { S.auctionNext = null; return; } S.auctionNext = { day: S.day + randInt(5, 8) - (W >= 4 ? 1 : 0) - (W >= 5 ? 1 : 0), lot }; },
+  roll() {
+    if (S.outskirts || S.wLevel < 2) return false;
+    if (!S.auctionNext) this.plan();
+    if (!S.auctionNext || S.day < S.auctionNext.day) return false;
+    const lot = S.auctionNext.lot; this.plan(); unlockFeat('auction');
+    this.open(lot); return true;
+  },
+  open(given) {
+    const lot = given || pickLot(); if (!lot) return;
     const value = Math.round(lot.v * M_ * rand(0.9, 1.15));
     const rivals = AUCTION_RIVALS.slice().sort(() => Math.random() - 0.5).slice(0, randInt(2, 4))
       .map(name => ({ name, max: Math.round(value * (Math.random() < 0.15 ? rand(1.5, 2.1) : rand(0.6, 1.45))) }));
@@ -220,12 +304,48 @@ const Auction = {
   },
   // 봇: 가치의 1.2배와 가진 돈의 35% 가운데 작은 값까지 부른다 (두 번째로 높은 값 + 한 호가에 결판)
   autoResolve() {
-    const mine = Math.min(this.value * 1.2, S.money * 0.35);
+    const mine = Math.min(this.value * 1.5, S.money * 0.5);
     const best = Math.max(...this.rivals.map(r => r.max));
     if (mine > best && mine >= this.cur) { this.cur = Math.min(mine, Math.max(this.cur, best) + this.step()); this.leader = 'me'; this.win(); }
     this.on = false;
   },
 };
+
+// ---------- 암시장 ----------
+// 공방 Lv3부터, 마감 때 가끔 뒷골목 어딘가에 판이 선다 — 그날 마감에만 [암시장] 탭이 열린다.
+// 일반 시장에는 없는 고급재료(공방 등급에 맞는 것까지)와, 재각인이 열린 뒤에는 각인 인두를 판다. 수량은 한정.
+// 값(천 안): 4등급 ≈ 제값의 1.6배 · 5등급 ≈ 2.5배 · 인두 400만
+const BM_GOODS = [
+  { id: 'bloodvial', g: 3, p: 120 }, { id: 'hook', g: 3, p: 110 }, { id: 'greathilt', g: 3, p: 110 }, { id: 'sealant', g: 3, p: 110 },
+  { id: 'shadecloth', g: 3, p: 90 }, { id: 'tachimount', g: 3, p: 120 }, { id: 'pivot', g: 3, p: 110 }, { id: 'armmount', g: 3, p: 120 },
+  { id: 'pump', g: 3, p: 100 }, { id: 'brushtip', g: 3, p: 120 }, { id: 'vamplate', g: 3, p: 130 },
+  { id: 'blackiron', g: 4, p: 205 }, { id: 'silk', g: 4, p: 310 }, { id: 'meteor', g: 4, p: 200 }, { id: 'ink', g: 4, p: 260 },
+  { id: 'pendulum', g: 4, p: 260 }, { id: 'ember', g: 4, p: 270 }, { id: 'resonator', g: 4, p: 270 }, { id: 'servo', g: 4, p: 280 },
+  { id: 'synthskin', g: 4, p: 280 }, { id: 'mechhinge', g: 4, p: 280 }, { id: 'scope', g: 4, p: 230 }, { id: 'mechcore', g: 4, p: 300 },
+  { id: 'stigma', g: 5, p: 450 }, { id: 'dawn', g: 5, p: 650 }, { id: 'capacitor', g: 5, p: 800 },
+];
+const BM_MIN_W = 3, RUNE_PRICE = 4000;
+const BlackMarket = {
+  chance() { return 0.16 + 0.04 * (S.wLevel - BM_MIN_W); },   // Lv3 16% · Lv4 20% · Lv5 24% (마감마다)
+  roll() {
+    if (S.outskirts || S.wLevel < BM_MIN_W || Math.random() >= this.chance()) return false;
+    const W = S.wLevel, pool = BM_GOODS.filter(x => x.g <= W && (!MATERIALS[x.id].gunpart || unlocked('gun')));
+    const pickW = Object.fromEntries(pool.map((x, i) => [i, x.g === W ? 3 : x.g === W - 1 ? 2 : 1]));   // 공방 등급에 맞는 것일수록 자주
+    const items = [], n = randInt(4, 6);
+    for (let t = 0; t < 30 && items.length < n; t++) { const x = pool[weightedPick(pickW)]; if (!items.some(y => y.id === x.id)) items.push({ id: x.id, n: x.g >= 5 ? 1 : randInt(1, 3), price: Math.round(x.p * rand(0.9, 1.15)) * KRW }); }
+    if (W >= 4) items.push({ id: 'rune', n: randInt(1, 2), price: RUNE_PRICE * KRW });   // 재각인이 열린 뒤
+    S.bm = { day: S.day, items };
+    unlockFeat('blackmarket');
+    return true;
+  },
+  open() { return !!(S.bm && S.bm.day === S.day && S.phase === 'close'); },
+};
+function blackMarketTabHTML() {
+  if (!BlackMarket.open()) return '<p class="dim">판이 걷혔다.</p>';
+  return `<div class="card bmcard"><h3>암시장 <small class="dim">오늘 마감에만</small></h3>
+    ${S.bm.items.map((x, i) => `<div class="mrow">${matChip(x.id)}<span class="dim">남은 ${x.n}</span><b>${fmtMoney(x.price)}</b>
+      <button data-act="bmBuy" data-i="${i}" ${x.n <= 0 || S.money < x.price ? 'disabled' : ''}>사기</button></div>`).join('')}</div>`;
+}
 
 // ---------- 원정: 다른 구에 분점을 내고 해결사 한 명과 다시 시작한다 ----------
 // 분점의 공방은 Lv1부터 (시설 없음). 사무소 등급·해금은 그대로. 돌아오면 그곳에서 얻은 모든 것을 가져온다.
@@ -336,8 +456,65 @@ function ampuleHTML() {
   return `<div class="ampule">💉 K사 재생 앰플 ${S.ampuleToday ? '<b class="good">오늘 계약됨</b>' : `<button class="small" data-act="ampule" ${S.money < ampuleCost() ? 'disabled' : ''}>계약 ${fmtMoney(ampuleCost())}</button>`}</div>`;
 }
 
+// ---------- 개량 탭: 잔흔 목록 ----------
+function remnantsHTML() {
+  const L = S.remnants || []; if (!L.length) return '<p class="dim">남은 잔흔이 없습니다.</p>';
+  const open = shopBloomed();
+  return `<div class="card remnants"><h3>잔흔 <small class="dim">${L.length}개</small></h3>${L.map(r => { const have = S.stock[r.shard] || 0, cost = restoreCost(r);
+    return gearHTML(r.gear, { cls: 'remnant', extra: `${r.mats ? `<div class="small dim">복구하면 재료로: ${Object.entries(r.mats).map(([id, n]) => matChip(id, n)).join(' ')}</div>` : '<div class="small dim">복구하면 개량 전 모습으로</div>'}${open ? `<div class="enhrow"><span class="dim small">${matChip(r.shard)} ${have}/${r.need} · ${fmtMoney(cost)}</span><button class="gold" data-act="restoreGear" data-id="${r.id}" ${have >= r.need && S.money >= cost ? '' : 'disabled'}>복구</button></div>` : ''}` }); }).join('')}</div>`;
+}
+function remnantPrice(r) { return Math.max(1000, Math.round(r.gear.value * REMNANT_SELL)); }
+function remnantSellHTML() {
+  const L = S.remnants || []; if (!L.length) return '';
+  return `<hr><h3>잔흔 팔기 <small class="dim">장비 판매가의 ${Math.round(REMNANT_SELL * 100)}%</small></h3>${L.map(r => `<div class="mrow sellrow"><span style="color:${RARITIES[r.gear.rarity || 0].color}">${esc(r.gear.name)} +${r.gear.q}</span><b>${fmtMoney(remnantPrice(r))}</b><button data-act="sellRemnant" data-id="${r.id}">팔기</button></div>`).join('')}`;
+}
+
 // ---------- 행동 ----------
 Object.assign(ACT, {
+  volatileOk() { const el = document.getElementById('volatileFx'); if (el) el.remove(); Game.paused = false; UI.mark('forge', 'top'); setTimeout(() => Tut.check('open'), 60); },
+  ward() {
+    const b = Forge.blank; if (!b || b.ward || b.wardUsed || !wardOpen() || !Forge.canWork()) return;
+    const c = wardCost(b); if (S.money < c) return;
+    S.money -= c; b.ward = true;
+    Forge.flash = { text: '파괴 방지', color: '#d8a0ff', life: 1 };
+    addLog(`불완전한 개화가 작업물을 감쌌다 — 파괴 방지 (${fmtMoney(c)})`, ''); Sound.synth(); save(); UI.mark('forge', 'top');
+  },
+  toggleBuffer() { S.useBuffer = !useBuffer(); save(); UI.mark('forge'); },
+  bloomWorkshop() {
+    if (S.bloomed || S.home || S.wLevel < 5 || S.money < SHOP_BLOOM.money || S.fame < SHOP_BLOOM.fame) return;
+    S.money -= SHOP_BLOOM.money; S.bloomed = true;
+    addLog(`✿ 「${S.workshopName}」 공방이 개화했다 — 이 공방은 이제 공방주의 E.G.O다.`, 'gold');
+    Sound.great(); save(); UI.renderClose(); UI.mark('top');
+    UI.showModal(`<h2><span class="rbw" data-t="공방 개화">공방 개화</span></h2><p>망치 소리가 멎은 밤, 공방이 숨을 쉬기 시작했다.</p>
+      <p>「${esc(S.workshopName)}」은 이제 당신의 E.G.O다. 부서진 것의 잔흔을 되살릴 수 있다.</p><button class="big gold" data-act="closeModal">확인</button>`);
+  },
+  sellRemnant(d) {
+    const L = S.remnants || [], r = L.find(x => x.id === Number(d.id)); if (!r) return;
+    const p = remnantPrice(r); S.money += p; S.remnants = L.filter(x => x !== r);
+    addLog(`「${r.gear.name}」의 잔흔을 팔았다 — ${fmtMoney(p)}`, ''); Sound.coin(); save(); UI.renderClose(); UI.mark('top');
+  },
+  restoreGear(d) {
+    const L = S.remnants || [], r = L.find(x => x.id === Number(d.id)); if (!r || !shopBloomed()) return;
+    const cost = restoreCost(r);
+    if ((S.stock[r.shard] || 0) < r.need || S.money < cost) return;
+    S.stock[r.shard] -= r.need; if (!S.stock[r.shard]) delete S.stock[r.shard];
+    S.money -= cost;
+    S.remnants = L.filter(x => x !== r);
+    const g = r.gear;
+    if (r.mats) {                                            // 새로 만들던 것 → 넣었던 재료로
+      for (const [id, n] of Object.entries(r.mats)) S.stock[id] = (S.stock[id] || 0) + n;
+      addLog(`잔흔을 녹여 「${g.name}」에 들어갔던 재료를 되찾았다.`, 'gold');
+      UI.showModal(`<h2>복구 완료</h2><p>「${esc(g.name)}」이(가) 될 뻔했던 잔흔을 녹여, 넣었던 재료를 되찾았다.</p>
+        <div class="chips">${Object.entries(r.mats).map(([id, n]) => matChip(id, n)).join('')}</div><p class="dim small">재료는 창고에 들어갔다.</p>
+        <button class="big gold" data-act="closeModal">확인</button>`);
+    } else {                                                 // 개량하다 부서진 것 → 개량 전 모습으로
+      g.restored = true; S.gear.push(g);
+      addLog(`잔흔에서 「${g.name}」 +${g.q}을(를) 되살렸다. 두 번째 잔흔은 남지 않는다.`, 'gold');
+      UI.showModal(`<h2>복구 완료</h2><p>개량하기 전의 모습으로 되살아났다. 보관함에 들어갔다.</p>${gearHTML(g, { big: true })}
+        <p class="dim small">한 번 되살린 장비는 다시 부서지면 잔흔이 남지 않는다.</p><button class="big gold" data-act="closeModal">확인</button>`);
+    }
+    Sound.great(); save(); UI.mark('forge', 'storage', 'stock'); if (S.phase === 'close') UI.renderClose();
+  },
   buyFac(d) {
     const F = FACILITIES[d.k], lv = facLv(d.k); if (!F || lv >= F.cost.length || S.wLevel < F.minW) return;
     const c = F.cost[lv] * M_; if (S.money < c) return;
@@ -361,6 +538,12 @@ Object.assign(ACT, {
     });
     recomputeTraits(g);
     addLog(`재각인 — 「${g.name}」: ${out.join(', ')} (${fmtMoney(c.money)})`, 'gold'); Sound.great(); save(); UI.renderClose();
+  },
+  bmBuy(d) {
+    if (!BlackMarket.open()) return;
+    const x = S.bm.items[Number(d.i)]; if (!x || x.n <= 0 || S.money < x.price) return;
+    S.money -= x.price; x.n--; S.stock[x.id] = (S.stock[x.id] || 0) + 1; S.seen = S.seen || {}; S.seen[x.id] = 1;
+    addLog(`암시장에서 ${MATERIALS[x.id].name}을(를) 샀다 — ${fmtMoney(x.price)}`, ''); Sound.coin(); save(); UI.renderClose(); UI.mark('stock', 'top');
   },
   aucBid() { Auction.bid(); },
   aucPass() { Auction.pass(); },

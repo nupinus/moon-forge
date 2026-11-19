@@ -49,11 +49,19 @@ const TUTS = {
   sing: [{ view: 'forge', sel: '.slots', t: '공방이 커져 날개의 특이점 기술을 쓸 수 있게 되었습니다. 합성할 때 함께 고를 수 있습니다.' }],
   hwan: [{ tab: 'hwan', sel: '[data-tab="hwan"]', t: 'H사의 환을 다룰 수 있게 되었습니다.' }],
   workshop: [{ tab: 'workshop', sel: '[data-tab="workshop"]', t: '공방 시설을 들일 수 있습니다. 화로·모루 같은 시설이 단조를 직접 좋게 만듭니다.' }],
-  rune: [{ tab: 'workshop', sel: '[data-tab="workshop"]', t: '각인 인두를 얻었습니다. [시설] 탭에서 장비의 각인을 다시 새길 수 있습니다 — 마음에 드는 각인은 눌러서 잠가 두세요.' }],
+  rune: [{ tab: 'workshop', sel: '[data-tab="workshop"]', t: '각인 인두를 얻었습니다(암시장에서도 가끔 팝니다). [시설] 탭에서 장비의 각인을 다시 새길 수 있습니다 — 마음에 드는 각인은 눌러서 잠가 두세요.' }],
   expedition: [{ tab: 'expedition', sel: '[data-tab="expedition"]', t: '원정이 열렸습니다. 다른 구에 분점을 내고 해결사 한 명과 다시 시작할 수 있습니다. 각 구 둥지의 주인을 쓰러뜨리면 인장을 얻습니다.' }],
   ego: [{ view: 'forge', sel: '#stockGrid', t: 'E.G.O 추출물을 손에 넣었습니다. 무기를 합성할 때 함께 녹여 넣을 수 있습니다.' }],
   auction: [{ sel: '.auction', t: '경매장이 열렸습니다! 몇 초 안에 결판이 납니다. 입찰을 누를 때마다 값이 오르고, 누가 부르면 시간이 조금 늘어납니다. 이기면 내일 아침 들어옵니다.' }],
+  blackmarket: [{ tab: 'blackmarket', sel: '[data-tab="blackmarket"]', t: '오늘 밤 뒷골목에 암시장 판이 섰습니다. 일반 시장에는 없는 고급재료를 팝니다 — 오늘 마감에만 열리고, 수량도 한정입니다.' }],
+  auctionTab: [{ tab: 'auction', sel: '[data-tab="auction"]', t: '[경매] 탭에서 다음 경매가 언제 열리는지, 무엇이 나오는지 미리 볼 수 있습니다. 돈을 모아 두세요.' }],
   ampule: [{ sel: '.ampule', t: 'K사와 가까워져 재생 앰플을 계약할 수 있습니다. 그날 한 번, 누군가의 죽음을 막아 줍니다. 값은 어마어마합니다.' }],
+  remnant: [
+    { tab: 'restore', sel: '[data-tab="restore"]', t: '개화한 공방은 부서진 것의 잔흔을 되살릴 수 있습니다. [복구] 탭에서 볼 수 있습니다.' },
+    { tab: 'restore', sel: '.remnants', t: '같은 등급대의 파편과 비용을 내면 복구할 수 있습니다 — 개량하다 부서진 장비는 개량 전 모습으로, 새로 만들다 부서진 것은 넣었던 재료로 돌아갑니다.' },
+  ],
+  shopBloom: [{ tab: 'upgrade', sel: '[data-tab="upgrade"]', t: '공방이 가장 높은 곳에 올랐습니다. [승급] 탭에서 공방을 개화시킬 수 있습니다 — 공방이 당신의 E.G.O가 됩니다.' }],
+  ward: [{ view: 'forge', sel: '[data-act="ward"]', t: '불완전하게 피어난 공방은 작업물 하나에 한 번, 값을 치르면 파괴를 막아 줍니다. 내구로 막는 것과 합쳐 최대 두 번 — 내구로 막을지는 내구 칸 아래에서 고를 수 있습니다.' }],
   manifest: [{ t: '누군가 개화 E.G.O를 발현했습니다 — 빌려 온 힘이 아니라, 스스로의 자아입니다. 그 장비는 이제 그 사람만의 것이고, 싸우는 방식이 바뀌었습니다.' }],
 };
 
@@ -79,14 +87,18 @@ const Tut = {
       if (W >= SING_UNLOCK_W) this.want('sing');
       if (Object.keys(S.stock).some(k => MATERIALS[k] && MATERIALS[k].cat === 'ego' && S.stock[k] > 0)) this.want('ego');
     }
-    if (moment === 'blank') this.want('forge2');
+    if (moment === 'blank') { this.want('forge2'); if (wardOpen()) this.want('ward'); }
     if (moment === 'done') this.want('forge3');
     if (moment === 'close') {
       this.want('close1');
       if (S.oGrade <= 8) this.want('assoc');
       if (W >= SING_UNLOCK_W) { this.want('hwan'); this.want('workshop'); }
       if ((S.stock.rune || 0) > 0 && W >= 4) this.want('rune');
+      if (S.auctionNext && S.feat && S.feat.auction) this.want('auctionTab');
+      if (BlackMarket.open()) this.want('blackmarket');
+      if (shopBloomed() && (S.remnants || []).length) this.want('remnant');
       if (W >= 5 && !S.home) this.want('expedition');
+      if (W >= 5 && !S.home && !S.bloomed) this.want('shopBloom');
       if (S.fixers.some(f => [f.weapon, f.armor].some(g => g && g.manifest))) this.want('manifest');
     }
     this.next();
@@ -115,7 +127,7 @@ const Tut = {
     if (st.sel && !el && (this.retry = (this.retry || 0) + 1) <= 6) { UI.flush && UI.flush(); return setTimeout(() => this.show(), 120); }   // 화면이 그려질 때까지 잠깐 기다린다
     this.retry = 0;
     const last = this.i >= steps.length - 1;
-    const text = st.t.replace('{w}', esc(S.workshopName));
+    const text = (typeof st.t === 'function' ? st.t() : st.t).replace('{w}', esc(S.workshopName));
     layer.innerHTML = `<div class="tut-shade"></div>${el ? '<div class="tut-hi"></div>' : ''}
       <div class="tut-skip"><button data-act="tutSkip">건너뛰기</button><button data-act="tutOff">튜토리얼 끄기</button></div>
       <div class="tut-box"><div class="tut-n">${this.i + 1} / ${steps.length}</div><p>${text}</p><button class="gold" data-act="tutNext">${last ? '확인' : '다음'}</button></div>`;
@@ -126,7 +138,7 @@ const Tut = {
     const box = layer.querySelector('.tut-box'), hi = layer.querySelector('.tut-hi');
     const vw = window.innerWidth, vh = window.innerHeight;
     if (!el || !hi) { box.style.left = Math.max(8, (vw - box.offsetWidth) / 2) + 'px'; box.style.top = Math.max(8, (vh - box.offsetHeight) / 2) + 'px'; return; }
-    el.scrollIntoView({ block: 'nearest' });
+    el.scrollIntoView({ block: 'center' });
     const r = el.getBoundingClientRect(), pad = 4;
     Object.assign(hi.style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
     const bw = box.offsetWidth, bh = box.offsetHeight;

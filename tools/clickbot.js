@@ -71,7 +71,7 @@ window.ClickBot = {
     if (F.blank) {
       if (F.contraWarn) return this.press(this.$('[data-act="finishCancel"]'), '금기품 경고 → 취소');
       const b = F.blank, p = F.probs('perfect');
-      const risky = p.destroy + (b.hp <= 1 ? p.damage : 0);
+      const risky = ((useBuffer() && b.hp >= BUFFER_HP) || b.ward ? 0 : p.destroy) + (b.hp <= 1 && !b.ward ? p.damage : 0);   // 내구가 넉넉하면 파괴는 버틴다
       if (b.strikes >= b.maxStrikes || risky > this.risk) return this.press(this.$('[data-act="finish"]'), '완성');
       if (F.reheatT > 0 || F.lock > 0) return this.say('기다리는 중');
       if (F.heatTier() === 'perfect') return this.press(this.$('[data-act="strike"]'), '두드리기 (적열)');

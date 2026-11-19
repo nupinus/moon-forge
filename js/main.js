@@ -98,7 +98,7 @@ const Game = {
       S.ammo = Math.min(S.ammo || 0, 2);
     }
     if (S.ammo == null) S.ammo = 60;
-    if (S.valueV !== 3) { S.gear.concat(S.fixers.map(f => f.weapon), S.fixers.map(f => f.armor)).filter(Boolean).forEach(g => { g.value = gearValue(g); }); S.valueV = 3; }   // 판매가 기준 변경
+    if (S.valueV !== 5) { S.gear.concat(S.fixers.map(f => f.weapon), S.fixers.map(f => f.armor)).filter(Boolean).forEach(g => { g.value = gearValue(g); }); S.valueV = 5; }   // 판매가 기준 변경
     if (S.zoneV !== 2) { if (!S.outskirts) S.zone = [0, 2, 4, 6, 8][S.zone] || 0; S.zoneV = 2; }   // 지역 확장(5→9곳): 옛 번호를 새 번호로
     if (!(S.zone >= 0 && S.zone < ZONES.length)) S.zone = 0;   // 지역 목록이 바뀌어도 범위 밖이 되지 않게
     if (!S.unlocks) S.unlocks = { gun: false, aug: false, ego: false };
@@ -172,6 +172,18 @@ const Game = {
     UI.showMorning();
   },
   openShop() {
+    if (S.phase !== 'morning') return;
+    if (S.examAsked !== S.day && !S.outskirts) {
+      const f = S.fixers.find(examReady);
+      if (f) {
+        S.examAsked = S.day;
+        if (typeof window !== 'undefined' && window.BOT_MUTE) { ACT.examYes({ fid: String(f.id) }); return; }   // 개발용 봇: 받는다
+        return UI.showModal(`<h2>하나 협회의 연락</h2>
+          <p><b>${esc(f.name)}</b>의 특색 심사를 받으시겠습니까?</p>
+          <p class="dim small">심사를 받는 동안(오늘 하루) 출동할 수 없습니다. 떨어지면 1급 0%로 돌아갑니다. · 합격 가능성 ${examChance(f) >= 0.7 ? '높음' : examChance(f) >= 0.45 ? '보통' : '낮음'}</p>
+          <div class="row"><button data-act="examNo">다음에</button><button class="gold" data-act="examYes" data-fid="${f.id}">심사 받기</button></div>`);
+      }
+    }
     S.phase = 'open'; S.time = 540;
     S.detained = false; S.recordWatched = false; delete S.huntEnded; S.huntWave = 0;
     Forge.resetAll();
@@ -179,7 +191,7 @@ const Game = {
     UI.setView('forge');
     Hunt.start();
     addLog(`${S.day}일차 개점. 현장: ${ZONES[S.zone].name}`, '');
-    setTimeout(() => Tut.check('open'), 60);
+    if (!(typeof window !== 'undefined' && window.BOT_MUTE ? (S.volatile = S.volatile || S.wLevel >= 3, false) : volatileBloom())) setTimeout(() => Tut.check('open'), 60);   // 공방 Lv3: 불완전 개화
     // 구의 금기 (출동)
     S.zoneStreak = S.lastZone === S.zone ? (S.zoneStreak || 1) + 1 : 1; S.lastZone = S.zone;
     { const avail = S.fixers.filter(isAvailable).length, going = Hunt.units.length;
@@ -203,7 +215,8 @@ const Game = {
     save();
     UI.markAll();
     UI.showClose('report');
-    Auction.roll();   // 가끔 경매장이 열린다
+    BlackMarket.roll();   // 가끔 암시장 판이 선다
+    if (!Auction.roll() && BlackMarket.open()) UI.renderClose();   // 정해진 날 경매
   },
   nextDay() {
     S.preWage = S.money;   // 10구 금기: 급여는 빼고, 스스로 진 빚만 본다
@@ -244,24 +257,11 @@ const Game = {
     // 하나 협회: 색 칭호
     S.lastColors = [];
     for (const f of S.fixers) {
-      if (f.colorTitle || f.lv < COLOR_REQ.lv || (f.kills || 0) < COLOR_REQ.kills || (f.bosses || 0) < COLOR_REQ.bosses) continue;
-      const used = S.fixers.map(x => x.colorTitle).filter(Boolean).concat(CANON_COLOR_NAMES);
-      const ng = [f.weapon, f.armor].find(g => g && g.customName && colorFamilyOf(g.customName));
-      let fam, title;
-      if (ng) {                       // 이름에 색이 깃든 장비 → 그 색의 특색
-        fam = colorFamilyOf(ng.customName);
-        const cw = colorWordOf(ng.customName);     // 이름에서 색 낱말만 따온다
-        fam = Object.assign({}, fam, { adj: cw || fam.adj });
-        title = `${fam.adj} ${pick(COLOR_NOUNS)}`;
-      } else {
-        const free = COLOR_FAMILIES.filter(c => !S.fixers.some(x => x.colorKey === c.key));
-        fam = pick(free.length ? free : COLOR_FAMILIES);
-        title = `${fam.adj} ${pick(COLOR_NOUNS)}`;
-      }
-      for (let k = 0; used.includes(title) && k < 20; k++) title = `${fam.adj} ${pick(COLOR_NOUNS)}`;
-      f.colorTitle = title; f.colorKey = fam.key; f.colorHex = fam.color; S.fame += 50;
-      S.lastColors.push(`${f.name} — 「${title}」`);
-      addLog(`하나 협회가 ${f.name}에게 특색 「${title}」을(를) 부여했다${ng ? ` — 「${ng.customName}」의 색을 따랐다` : ''}. ${fam.perk} · 명성 +50`, 'gold');
+      if (!f.exam) continue;
+      const pass = Math.random() < examChance(f);
+      delete f.exam;
+      if (pass) { grantColor(f); }
+      else { f.lv = 25; f.exp = 0; f.curHp = unitStats(f).maxHp; S.lastColors.push(`${f.name} — 불합격 (1급 0%로)`); addLog(`하나 협회 특색 심사 — ${f.name} 불합격. 처음부터 다시 쌓아야 한다.`, 'bad'); }
     }
     S.day++;
     genOrders(); genCandidates(); resetReport();
@@ -488,6 +488,33 @@ const Game = {
   },
 };
 
+// ---------- 하나 협회 특색 심사 ----------
+// 1급 등급 경험치가 100%인 해결사만. 개점할 때 연락이 오고, 받으면 그날은 심사로 자리를 비운다.
+// 합격 확률은 그동안의 처치·보스·장비로 정해진다. 떨어지면 1급 0%(Lv25)로 돌아간다.
+function examChance(f) {
+  const gear = [f.weapon, f.armor].filter(Boolean).reduce((a, g) => a + (g.rarity || 0), 0);
+  return Math.min(0.9, 0.3 + Math.min(0.25, (f.kills || 0) / 1600) + Math.min(0.2, (f.bosses || 0) * 0.03) + Math.min(0.15, gear * 0.012));
+}
+function grantColor(f) {
+  const used = S.fixers.map(x => x.colorTitle).filter(Boolean).concat(CANON_COLOR_NAMES);
+  const ng = [f.weapon, f.armor].find(g => g && g.customName && colorFamilyOf(g.customName));
+  let fam, title;
+  if (ng) {                       // 이름에 색이 깃든 장비 → 그 색의 특색
+    fam = colorFamilyOf(ng.customName);
+    const cw = colorWordOf(ng.customName);     // 이름에서 색 낱말만 따온다
+    fam = Object.assign({}, fam, { adj: cw || fam.adj });
+    title = `${fam.adj} ${pick(COLOR_NOUNS)}`;
+  } else {
+    const free = COLOR_FAMILIES.filter(c => !S.fixers.some(x => x.colorKey === c.key));
+    fam = pick(free.length ? free : COLOR_FAMILIES);
+    title = `${fam.adj} ${pick(COLOR_NOUNS)}`;
+  }
+  for (let k = 0; used.includes(title) && k < 20; k++) title = `${fam.adj} ${pick(COLOR_NOUNS)}`;
+  f.colorTitle = title; f.colorKey = fam.key; f.colorHex = fam.color; S.fame += 50;
+  S.lastColors.push(`${f.name} — 「${title}」`);
+  addLog(`하나 협회가 ${f.name}에게 특색 「${title}」을(를) 부여했다${ng ? ` — 「${ng.customName}」의 색을 따랐다` : ''}. ${fam.perk} · 명성 +50`, 'gold');
+}
+
 // ---------- 납품받은 손님의 한마디 ----------
 const CLIENT_WORDS = {
   great: ['「{n}」, 손에 착 감기더군. 다음에도 부탁하지.', '기대 이상이었다. 덕분에 일이 일찍 끝났어.', '그 물건 덕에 살아 돌아왔다. 고맙다.',
@@ -541,6 +568,13 @@ const ACT = {
   },
   closeModal() { UI.hideModal(); UI.confirmKey = null; },
   openShop() { Game.openShop(); },
+  examYes(d) {
+    const f = getFixer(Number(d.fid)); UI.hideModal(); if (!f || !examReady(f)) return Game.openShop();
+    f.exam = { day: S.day }; S.party = S.party.filter(id => id !== f.id);
+    addLog(`${f.name}이(가) 하나 협회의 특색 심사를 받으러 갔다.`, 'gold');
+    Game.openShop();
+  },
+  examNo() { UI.hideModal(); Game.openShop(); },
 
   // 상단 바
   pause() { if (S.phase !== 'open') return; Game.paused = !Game.paused; UI.mark('top'); },
@@ -704,6 +738,7 @@ const ACT = {
     if (!c || S.money < c.money || S.fame < c.fame) return;
     S.money -= c.money; S.oGrade--;
     addLog(`사무소 승급! ${S.oGrade}급 사무소가 되었다.`, 'gold');
+    S.fixers.forEach(f => { if (gainExp(f, 0)) f.curHp = unitStats(f).maxHp; });   // 등급 상한이 풀린다
     Sound.finish();
     save(); UI.renderClose(); UI.mark('top'); UI.showPromotion('office', S.oGrade); Game.checkWin();
   },

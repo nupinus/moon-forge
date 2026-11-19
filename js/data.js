@@ -2,8 +2,9 @@
 // 화폐 '안'은 한국 원화 기준 가치 (원작에서도 안 ≈ 원). 아래 수치는 천 안 단위로 적고 KRW를 곱한다.
 const KRW = 1000;
 // ---------- 버전 · 공지 (커밋할 때마다 올린다 — 내용은 짧게, 숨은 것은 알려주지 않는다) ----------
-const GAME_VERSION = '1.2';
+const GAME_VERSION = '1.3';
 const NOTICES = [
+  { v: '1.3', date: '2026-11-19', items: ['장비가 덜 부서집니다 — 내구로 파괴를 한 번 막을 수 있습니다 (파괴 보호)', '오래 두드릴수록 돌아오는 것이 커집니다', '성공·대성공·손상·파괴의 손맛이 저마다 다릅니다', '부서진 장비가 잔흔을 남깁니다', '공방이 가장 높은 곳에 오르면 그다음이 있습니다', '가끔 공방에 이상한 기운이 감돕니다', '공방 시설을 새로 정비했습니다', '경매장이 마감 화면의 탭으로 옮겨졌습니다', '어딘가에 암시장이 열립니다', '일반 시장에서는 고급 재료와 인두를 팔지 않습니다', '사무소 등급이 올라야 해결사들도 더 높은 등급에 오를 수 있습니다', '1급 해결사에게 하나협회의 연락이 올지도 모릅니다', '해결사가 성장하면 급여도 오릅니다', '재료값·장비 판매가·성장 속도를 다듬었습니다', '모바일 화면과 튜토리얼 위치 등 여러 화면 문제를 고쳤습니다'] },
   { v: '1.2', date: '2026-11-18', items: ['저장 후 이어하면 구역이 바뀌던 문제를 비롯한 여러 버그를 고쳤습니다', '새로운 구 7곳이 열렸습니다 — 구마다 현장의 모습과 금기가 다릅니다', '금기가 더 이상 대장간 일을 막지 않습니다', '두드리는 동안 완성될 장비의 능력치를 볼 수 있습니다', '대성공 별명에 등급이 생겼습니다', '각인의 세기가 장비 등급에 따라 달라집니다', '지은 이름이 장비의 이름이 됩니다', '공방이 커질수록 찾아오는 손님이 달라집니다', '공방에 새로운 시설이 들어설 자리가 생겼습니다', '가끔 경매장이 열립니다', '원정을 떠날 수 있습니다', '누군가의 자아가 피어날지도 모릅니다', '처음 시작하는 공방주를 위한 안내가 생겼습니다', '손가락, 재료값 등 여러 가지를 다듬었습니다'] },
   { v: '1.1', date: '2026-11-16', items: ['장비 그림을 새로 그렸습니다', '단조대가 새 단장을 했습니다', '뒷골목에 새 구역과 출동 지역이 생겼습니다', '재료마다 망치질의 손맛이 다릅니다', '같은 종류 장비는 골라서 납품할 수 있습니다', '승급의 순간을 축하합니다', '하루가 조금 길어졌습니다', '현장에 더 많은 환상체가 나타납니다', '환상체마다 저만의 능력이 있습니다', 'E.G.O 장비가 제 모습을 찾았습니다', '현장과 단조대를 새로 그렸습니다', '상단에 공지 버튼이 생겼습니다', '새 버전이 나오면 구석에서 조용히 알려 드립니다', '구역을 누르면 그곳의 날개와 금기를 볼 수 있습니다', '재료함이 등급별로 정리됩니다', '장비 값이 등급과 솜씨, 깃든 힘에 따라 매겨집니다'] },
   { v: '1.0', date: '2026-11-15', items: ['첫 공개'] },
@@ -18,35 +19,35 @@ const HUNT_YIELD = DAY_SPEED / 5;   // 하루가 길어진 만큼 처치당 보�
 // cat: metal(금속: 무기 주재료 / 둔기·갑주 형태재료), fabric(천: 방어구 주재료),
 //      shape(형태재료), core(속성재료)
 const MATERIALS = {
-  scrap:     { name: '고철',          grade: 1, cat: 'metal',  color: '#9a8f80', price: 15,  adj: '고철' },
-  steel:     { name: '강철 조각',     grade: 2, cat: 'metal',  color: '#c3ced6', price: 45,  adj: '강철' },
-  alloy:     { name: '특수 합금',     grade: 3, cat: 'metal',  color: '#7fd6c8', price: 110, adj: '합금' },
-  blackiron: { name: '흑철',          grade: 4, cat: 'metal',  color: '#7a6f9a', price: 240, adj: '흑철' },
+  scrap:     { name: '고철',          grade: 1, cat: 'metal',  color: '#9a8f80', price: 12,  adj: '고철' },
+  steel:     { name: '강철 조각',     grade: 2, cat: 'metal',  color: '#c3ced6', price: 26,  adj: '강철' },
+  alloy:     { name: '특수 합금',     grade: 3, cat: 'metal',  color: '#7fd6c8', price: 58, adj: '합금' },
+  blackiron: { name: '흑철',          grade: 4, cat: 'metal',  color: '#7a6f9a', price: 128, adj: '흑철' },
   stigma:    { name: '성흔 금속',     grade: 5, cat: 'metal',  color: '#f0d77a', price: 0,   adj: '성흔' },
-  leather:   { name: '가죽 끈',       grade: 1, cat: 'fabric', color: '#9a643f', price: 12,  adj: '가죽' },
+  leather:   { name: '가죽 끈',       grade: 1, cat: 'fabric', color: '#9a643f', price: 18,  adj: '가죽' },
   kevlar:    { name: '방탄 섬유',     grade: 2, cat: 'fabric', color: '#7a8a5a', price: 40,  adj: '방탄' },
-  weave:     { name: '강화 섬유',     grade: 3, cat: 'fabric', color: '#4f74a8', price: 105, adj: '강화' },
-  silk:      { name: '이질 비단',     grade: 4, cat: 'fabric', color: '#b05a92', price: 230, adj: '비단' },
+  weave:     { name: '강화 섬유',     grade: 3, cat: 'fabric', color: '#4f74a8', price: 85, adj: '강화' },
+  silk:      { name: '이질 비단',     grade: 4, cat: 'fabric', color: '#b05a92', price: 195, adj: '비단' },
   dawn:      { name: '여명의 천',     grade: 5, cat: 'fabric', color: '#f2e8d0', price: 0,   adj: '여명' },
   bone:      { name: '뼛조각',        grade: 1, cat: 'shape', shape: 'spear', color: '#e3dcc2', price: 10 },
   cog:       { name: '기계 톱니',     grade: 2, cat: 'shape', shape: 'gun',   color: '#c9a050', price: 25, gunpart: true },
-  clot:      { name: '핏방울 응고물', grade: 1, cat: 'core', trait: 'bleed',   color: '#c0303f', price: 30 },
-  fuel:      { name: '타다 남은 연료', grade: 2, cat: 'core', trait: 'burn',    color: '#ef8a2e', price: 70 },
-  coil:      { name: '진동 코일',     grade: 2, cat: 'core', trait: 'tremor',  color: '#e3cf4a', price: 70 },
-  crystal:   { name: '균열 수정',     grade: 3, cat: 'core', trait: 'rupture', color: '#66d9ef', price: 150 },
-  battery:   { name: '충전 배터리',   grade: 3, cat: 'core', trait: 'charge',  color: '#7fb2ff', price: 150 },
+  clot:      { name: '핏방울 응고물', grade: 1, cat: 'core', trait: 'bleed',   color: '#c0303f', price: 22 },
+  fuel:      { name: '타다 남은 연료', grade: 2, cat: 'core', trait: 'burn',    color: '#ef8a2e', price: 36 },
+  coil:      { name: '진동 코일',     grade: 2, cat: 'core', trait: 'tremor',  color: '#e3cf4a', price: 37 },
+  crystal:   { name: '균열 수정',     grade: 3, cat: 'core', trait: 'rupture', color: '#66d9ef', price: 85 },
+  battery:   { name: '충전 배터리',   grade: 3, cat: 'core', trait: 'charge',  color: '#7fb2ff', price: 90 },
   ink:       { name: '침전된 잉크',   grade: 4, cat: 'core', trait: 'sinking', color: '#6a6fe0', price: 0 },
   pendulum:  { name: '고요한 추',     grade: 4, cat: 'core', trait: 'poise',   color: '#d8d8f4', price: 0 },
   // --- 확장 재료 ---
-  brass:     { name: '놋쇠',          grade: 2, cat: 'metal',  color: '#c9a24a', price: 50,  adj: '놋쇠' },
+  brass:     { name: '놋쇠',          grade: 2, cat: 'metal',  color: '#c9a24a', price: 27,  adj: '놋쇠' },
   meteor:    { name: '운철',          grade: 4, cat: 'metal',  color: '#6a6a7e', price: 0,   adj: '운철' },
-  canvas:    { name: '범포',          grade: 1, cat: 'fabric', color: '#b8a888', price: 10,  adj: '범포' },
+  canvas:    { name: '범포',          grade: 1, cat: 'fabric', color: '#b8a888', price: 17,  adj: '범포' },
   shadecloth:{ name: '차광 섬유',     grade: 3, cat: 'fabric', color: '#3e3a4e', price: 0,   adj: '차광' },
   fang:      { name: '들개 송곳니',   grade: 1, cat: 'shape', shape: 'knuckle',    color: '#efe6cf', price: 12 },
   haft:      { name: '굵은 자루',     grade: 1, cat: 'shape', shape: 'axe',        color: '#7a5434', price: 15 },
   chainlink: { name: '녹슨 사슬 고리', grade: 1, cat: 'shape', shape: 'chain',     color: '#9a6a4a', price: 20 },
   tsuba:     { name: '흑운회 날밑',   grade: 2, cat: 'shape', shape: 'katana',     color: '#2a2a34', price: 0 },
-  guard:     { name: '세검 손잡이',   grade: 2, cat: 'shape', shape: 'rapier',     color: '#d8c890', price: 40 },
+  guard:     { name: '세검 손잡이',   grade: 2, cat: 'shape', shape: 'rapier',     color: '#d8c890', price: 29 },
   hook:      { name: '갈고리',        grade: 3, cat: 'shape', shape: 'scythe',     color: '#8a8a7a', price: 0 },
   greathilt: { name: '대검 자루',     grade: 3, cat: 'shape', shape: 'greatsword', color: '#5a4a3a', price: 0 },
   thread:    { name: '방탄 실',       grade: 2, cat: 'shape', ashape: 'suit',      color: '#4a4a5a', price: 30 },
@@ -61,25 +62,25 @@ const MATERIALS = {
   braid:      { name: '꼰 가죽줄',     grade: 1, cat: 'shape', shape: 'whip',      color: '#7a4a2a', price: 14 },
   rod:        { name: '곧은 지팡이대', grade: 1, cat: 'shape', shape: 'staff',     color: '#a08060', price: 16 },
   hammerhead: { name: '망치 머리',     grade: 2, cat: 'shape', shape: 'hammer',    color: '#6a6a72', price: 40 },
-  plating:    { name: '손등 판금',     grade: 2, cat: 'shape', shape: 'gauntlet',  color: '#9aa0a8', price: 42 },
+  plating:    { name: '손등 판금',     grade: 2, cat: 'shape', shape: 'gauntlet',  color: '#9aa0a8', price: 28 },
   shieldboss: { name: '방패 심',       grade: 2, cat: 'shape', shape: 'shield',    color: '#8a7a5a', price: 38 },
-  twinhilt:   { name: '쌍 손잡이',     grade: 2, cat: 'shape', shape: 'dualblade', color: '#4a3a3a', price: 45 },
+  twinhilt:   { name: '쌍 손잡이',     grade: 2, cat: 'shape', shape: 'dualblade', color: '#4a3a3a', price: 20 },
   hwanhilt:   { name: '환도 자루',     grade: 2, cat: 'shape', shape: 'hwando',    color: '#3a2a20', price: 45 },
   bowstring:  { name: '활시위',        grade: 2, cat: 'shape', shape: 'bow',       color: '#d8ccb0', price: 35 },
-  fanrib:     { name: '부채살',        grade: 2, cat: 'shape', shape: 'fan',       color: '#c8a868', price: 40 },
+  fanrib:     { name: '부채살',        grade: 2, cat: 'shape', shape: 'fan',       color: '#c8a868', price: 20 },
   talon:      { name: '짐승 발톱',     grade: 2, cat: 'shape', shape: 'claw',      color: '#e0d4b8', price: 0 },
   barb:       { name: '미늘',          grade: 2, cat: 'shape', shape: 'harpoon',   color: '#7a8a8a', price: 0 },
-  cylinder:   { name: '회전 탄창',     grade: 2, cat: 'shape', shape: 'revolver',  color: '#8a8a90', price: 60, gunpart: true },
+  cylinder:   { name: '회전 탄창',     grade: 2, cat: 'shape', shape: 'revolver',  color: '#8a8a90', price: 30, gunpart: true },
   tachimount: { name: '태도 장식',     grade: 3, cat: 'shape', shape: 'tachi',     color: '#b08a3a', price: 0 },
-  glaivehaft: { name: '언월 자루',     grade: 3, cat: 'shape', shape: 'glaive',    color: '#5a3a2a', price: 150 },
+  glaivehaft: { name: '언월 자루',     grade: 3, cat: 'shape', shape: 'glaive',    color: '#5a3a2a', price: 85 },
   vamplate:   { name: '기병창 손보호대', grade: 3, cat: 'shape', shape: 'lance',   color: '#a0a0b0', price: 0 },
-  trigger:    { name: '석궁 방아쇠',   grade: 3, cat: 'shape', shape: 'crossbow',  color: '#6a5a4a', price: 160 },
+  trigger:    { name: '석궁 방아쇠',   grade: 3, cat: 'shape', shape: 'crossbow',  color: '#6a5a4a', price: 90 },
   brushtip:   { name: '붓털',          grade: 3, cat: 'shape', shape: 'brush',     color: '#2a2a2a', price: 0 },
   pivot:      { name: '가위 축',       grade: 3, cat: 'shape', shape: 'scissors',  color: '#b8b8c0', price: 0 },
   armmount:   { name: '팔 장착대',     grade: 3, cat: 'shape', shape: 'armblade',  color: '#5a6a7a', price: 0 },
-  longbarrel: { name: '긴 총열',       grade: 3, cat: 'shape', shape: 'rifle',     color: '#4a4a52', price: 180, gunpart: true },
+  longbarrel: { name: '긴 총열',       grade: 3, cat: 'shape', shape: 'rifle',     color: '#4a4a52', price: 55, gunpart: true },
   pump:       { name: '펌프 장치',     grade: 3, cat: 'shape', shape: 'shotgun',   color: '#6a4a3a', price: 0, gunpart: true },
-  bayonetlug: { name: '착검 장치',     grade: 3, cat: 'shape', shape: 'bayonet',   color: '#7a7a6a', price: 170, gunpart: true },
+  bayonetlug: { name: '착검 장치',     grade: 3, cat: 'shape', shape: 'bayonet',   color: '#7a7a6a', price: 45, gunpart: true },
   scope:      { name: '조준경',        grade: 4, cat: 'shape', shape: 'sniper',    color: '#3a4a5a', price: 0, gunpart: true },
   mechhinge:  { name: '변형 경첩',     grade: 4, cat: 'shape', shape: 'tfaxe',     color: '#8a7a6a', price: 0 },
   mechcore:   { name: '변형 기어함',   grade: 4, cat: 'shape', shape: 'tfgreat',   color: '#7a6a5a', price: 0 },
@@ -101,7 +102,7 @@ const MARKET_TIERS = [
   ['steel', 'kevlar', 'clot', 'brass', 'chainlink', 'thread', 'rod', 'hammerhead', 'plating', 'shieldboss', 'ceramic'],
   ['cog', 'fuel', 'coil', 'guard', 'lining', 'twinhilt', 'hwanhilt', 'bowstring', 'fanrib', 'cylinder', 'mailring'],
   ['alloy', 'weave', 'glaivehaft', 'trigger', 'longbarrel', 'bayonetlug', 'heavyplate'],
-  ['crystal', 'battery', 'blackiron', 'silk'],
+  ['crystal', 'battery'],   // 4등급 이상 고급재료는 암시장에서만
 ];
 
 const FORMS = {
@@ -254,21 +255,26 @@ function epithetTier(greats) { let t = -1; EPITHET_TIERS.forEach((T, i) => { if 
 const WORKSHOP_LEVELS = [
   { name: '간이 공방',         up: { money: 400,  fame: 15 } },
   { name: '뒷골목 공방',       up: { money: 1200, fame: 60 } },
-  { name: '인정받은 공방',     up: { money: 3500, fame: 200 } },
-  { name: '이름난 공방',       up: { money: 9000, fame: 500 } },
+  { name: '인정받은 공방',     up: { money: 5250, fame: 200 } },
+  { name: '이름난 공방',       up: { money: 13500, fame: 500 } },
   { name: '도시의 명품 공방',  up: null },
 ];
 
+// 이름값 — 승급이 비싸진 만큼 확실한 보상
+// 공방 Lv3·4·5: 그 공방에서 만든 장비의 능력치 / 사무소 5급~1급: 현장 수입·재료
+const WORKSHOP_RENOWN = [0, 0, 0.03, 0.06, 0.10];
+function workshopRenown(W) { return WORKSHOP_RENOWN[Math.max(0, Math.min(4, (W || 1) - 1))]; }
+function officeRenown(o) { return Math.max(0, 6 - (o || 9)) * 0.03; }   // 5급 +3% … 1급 +15%
 // 사무소 등급 g → g-1 승급 비용
 const OFFICE_UP = {
   9: { money: 300,   fame: 15 },
   8: { money: 700,   fame: 50 },
   7: { money: 1400,  fame: 110 },
-  6: { money: 2500,  fame: 200 },
-  5: { money: 4200,  fame: 330 },
-  4: { money: 7000,  fame: 520 },
-  3: { money: 9000,  fame: 800 },
-  2: { money: 13000, fame: 1200 },
+  6: { money: 3750,  fame: 200 },
+  5: { money: 6300,  fame: 330 },
+  4: { money: 10500,  fame: 520 },
+  3: { money: 13500,  fame: 800 },
+  2: { money: 19500, fame: 1200 },
 };
 
 const ZONES = [

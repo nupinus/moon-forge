@@ -485,7 +485,7 @@ const Hunt = {
       }
     }
     if (e.d.money) {
-      const m = Math.round(e.d.money * HUNT_YIELD * rand(0.6, 1.3) * (live.some(u => u.colorKey === 'yellow') ? 1.15 : 1));   // 노란 특색
+      const m = Math.round(e.d.money * HUNT_YIELD * (1 + (S.outskirts ? 0 : officeRenown(S.oGrade))) * rand(0.6, 1.3) * (live.some(u => u.colorKey === 'yellow') ? 1.15 : 1));   // 노란 특색
       S.money += m; S.report.huntMoney += m;
     }
     const z = ZONES[this.zone];
@@ -495,7 +495,7 @@ const Hunt = {
       addIncoming(e.berserkOf.bw, 1);
       addLog(`광폭화한 ${e.berserkOf.name}을(를) 쓰러뜨렸다. 남은 것은 흑수의 재료뿐.`, 'bad');
     }
-    const n = (e.boss ? randInt(2, 3) : (Math.random() < 0.72 * HUNT_YIELD ? 1 : 0)) + (assoc() === 'seven' && Math.random() < 0.2 ? 1 : 0);
+    const n = (e.boss ? randInt(2, 3) : (Math.random() < 0.72 * HUNT_YIELD * (1 + officeRenown(S.oGrade)) ? 1 : 0)) + (assoc() === 'seven' && Math.random() < 0.2 ? 1 : 0);
     const got = [];
     for (let i = 0; i < n; i++) {
       let id = weightedPick(z.drops);

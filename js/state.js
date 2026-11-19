@@ -86,16 +86,31 @@ function patentMax() { return Math.max(0, S.wLevel - 1) + (assoc() === 'tres' ? 
 function saleTax() { return assoc() === 'tres' ? 0 : SALE_TAX; }
 function marketPrice(id) { return Math.round(MATERIALS[id].price * (assoc() === 'tres' ? 0.85 : 1)); }
 function expNeed(lv) { return Math.round(20 + lv * 18 + lv * lv * 1.5); }
+// 해결사 등급 상한: 사무소 등급보다 한 단계 위까지 (사무소 5급 → 4급까지). 1급은 Lv25~30.
+function gradeCap() { return Math.max(1, (S ? S.oGrade : 9) - 1); }
+function lvCap() { const g = gradeCap(); return g <= 1 ? 30 : (9 - g) * 3 + 3; }   // 1급은 Lv25~30
 function gainExp(f, x) {
   f.exp += x;
   let ups = 0;
-  while (f.exp >= expNeed(f.lv) && f.lv < 30) { f.exp -= expNeed(f.lv); f.lv++; ups++; }
-  if (f.lv >= 30) f.exp = 0;
+  const cap = lvCap();
+  while (f.exp >= expNeed(f.lv) && f.lv < cap) { f.exp -= expNeed(f.lv); f.lv++; ups++; }
+  if (f.lv >= cap) f.exp = Math.min(f.exp, expNeed(f.lv));   // 상한: 100%에서 멈춘다 (사무소가 승급하면 이어서 오른다)
   return ups;
 }
+// 등급 경험치: 지금 등급 안에서 얼마나 왔나 (등급마다 레벨 3칸, 1급은 Lv25~30)
+function gradeExp(f) {
+  const g = fixerGrade(f), lo = (9 - g) * 3 + 1, hi = g === 1 ? 30 : lo + 2;
+  let need = 0, have = 0;
+  for (let l = lo; l <= hi; l++) { need += expNeed(l); if (l < f.lv) have += expNeed(l); }
+  if (f.lv >= lo && f.lv <= hi) have += Math.min(f.exp, expNeed(f.lv));
+  return Math.min(1, have / need);
+}
+function atGradeCap(f) { return f.lv >= lvCap() && f.exp >= expNeed(f.lv); }
+// 특색 심사: 1급 등급 경험치 100%
+function examReady(f) { return !f.colorTitle && !f.exam && f.lv >= 30 && f.exp >= expNeed(30); }
 function fixerGrade(f) { return Math.max(1, 9 - Math.floor((f.lv - 1) / 3)); }
 function wageOf(f) { return (40 + f.lv * 10) * KRW * (f.blackwater === 'hb_chuk' ? 2 : 1); }   // 흑수 - 축: 식욕 폭증
-function isAvailable(f) { return S.day > (f.injuredUntil || 0); }
+function isAvailable(f) { return S.day > (f.injuredUntil || 0) && !f.exam; }   // 특색 심사 중에는 쓸 수 없다
 function getFixer(id) { return S.fixers.find(f => f.id === id); }
 function maxMembers() { return 3 + Math.floor((9 - S.oGrade) / 2); }
 const MAX_PARTY = 4;
@@ -303,7 +318,7 @@ function newGame(wName, oName, dist) {
     v: 1, workshopName: wName, officeName: oName, day: 1, phase: 'morning', time: 540,
     money: 500 * KRW, fame: 0, krw: true, wLevel: 1, oGrade: 9,
     stock: { scrap: 6, leather: 4, bone: 2, clot: 1 }, incoming: {},
-    gear: [], fixers: [], memorial: [], party: [], zone: 0, zoneV: 2, valueV: 3,
+    gear: [], fixers: [], memorial: [], party: [], zone: 0, zoneV: 2, valueV: 5,
     orders: [], candidates: [], nextId: 1, report: null, log: [],
     stats: { crafted: 0, destroyed: 0, kills: 0, deaths: 0, great: 0, bosses: 0 },
     speed: 1, morning: null, won: false, muted: false, patents: [], assoc: null,

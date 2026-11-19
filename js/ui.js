@@ -284,7 +284,7 @@ const UI = {
 
   renderTop() {
     this.updateNoticeBadge();
-    this.$('tbWorkshop').textContent = `${S.workshopName} 공방`;
+    { const el = this.$('tbWorkshop'), nm = `${S.workshopName} 공방`; if (shopBloomed()) { el.className = 'rbw'; el.dataset.t = nm; } else { el.className = ''; } el.textContent = nm; }
     this.$('tbOffice').textContent = `${S.officeName} 사무소 · ${S.oGrade}급${S.assoc ? ' · ' + ASSOCIATIONS[S.assoc].name : ''} · 공방 ${workshopClass()}급(Lv.${S.wLevel})`;
     this.$('tbDay').textContent = `${S.day}일차`;
     this.$('tbTime').textContent = S.phase === 'open' ? fmtTime(S.time) : S.phase === 'close' ? '마감' : '개점 전';
@@ -606,7 +606,7 @@ const UI = {
         : m.night.win ? `<p class="good">🌙 ${S.outskirts ? "외곽의 밤" : "뒷골목의 밤"} — ${m.night.kind}의 습격을 막아냈다! 명성 +${m.night.fame}</p>`
         : `<p class="bad">🌙 ${S.outskirts ? "외곽의 밤" : "뒷골목의 밤"} — ${m.night.kind}에게 습격당했다. 잃은 것: ${(m.night.lost || []).join(', ') || '없음'}${m.night.hurt && m.night.hurt.length ? ' · 부상: ' + m.night.hurt.map(esc).join(', ') : ''}${(m.night.watchers || []).length ? '' : ' (야간 경계 인원 없음)'}</p>`) : ''}
       ${m.royalty ? `<p>트레스 협회 특허 로열티: <b class="good">+${fmtMoney(m.royalty)}</b></p>` : ''}
-      ${m.colors && m.colors.length ? `<p class="gold">🎨 하나 협회 특색 부여: ${m.colors.map(esc).join(', ')}</p>` : ''}
+      ${m.colors && m.colors.length ? `<p class="gold">🎨 하나 협회 특색 심사: ${m.colors.map(esc).join(', ')}</p>` : ''}
       ${m.resting && m.resting.length ? `<p class="warn">휴식 중: ${m.resting.map(esc).join(', ')}</p>` : ''}
       ${tabooHTML(S.day > 1)}
       ${ampuleHTML()}
@@ -638,8 +638,11 @@ const UI = {
   },
   renderClose() {
     const wrap = this.$('closeWrap'); if (!wrap) return;
-    const tabs = [['report', '결산'], ['roster', '인원·장비'], ['hire', '고용'], ['market', '시장'], ['upgrade', '승급'], ['deploy', '출동 지역'], ['fingers', '관계'], ['hwan', 'H사 환'], ['workshop', '시설'], ['expedition', '원정']]
+    const tabs = [['report', '결산'], ['roster', '인원·장비'], ['hire', '고용'], ['market', '시장'], ['upgrade', '승급'], ['deploy', '출동 지역'], ['fingers', '관계'], ['hwan', 'H사 환'], ['restore', '복구'], ['blackmarket', '암시장'], ['auction', '경매'], ['workshop', '시설'], ['expedition', '원정']]
       .filter(([k]) => k !== 'hwan' || S.wLevel >= SING_UNLOCK_W || S.fixers.some(f => f.blackwater))
+      .filter(([k]) => k !== 'restore' || (shopBloomed() && (S.remnants || []).length))   // 복구는 개화한 공방에서만 — 그 전에는 보이지 않는다
+      .filter(([k]) => k !== 'blackmarket' || BlackMarket.open())
+      .filter(([k]) => k !== 'auction' || (!S.outskirts && S.auctionNext && feat('auction')))
       .filter(([k]) => (k !== 'workshop' || S.wLevel >= 4) && (k !== 'expedition' || S.wLevel >= 5 || S.home || sealCount()) && (k !== 'hire' || !S.home))   // H사 환: 공방 Lv4 전에는 숨김
       .filter(([k]) => k !== 'fingers' || (!S.outskirts && feat('fingers')));                                                  // 외곽에는 손가락가 없다
     if (!tabs.some(([k]) => k === this.closeTab)) this.closeTab = 'report';
@@ -705,7 +708,9 @@ const UI = {
           <div class="finfo">
             <div class="fname">${esc(f.name)} <span class="grade">${fixerGrade(f)}급</span>${f.colorTitle ? ` <span class="colortitle" style="--cc:${colorHexOf(f)}" title="${esc((COLOR_FAMILIES.find(c => c.key === f.colorKey) || {}).perk || '')}">특색 「${esc(f.colorTitle)}」</span>` : ''} <small>Lv.${f.lv}</small></div>
             <div class="augrow">${!unlocked('aug') ? '' : Object.entries(AUGMENTS).map(([k, A]) => (f.aug || {})[k] ? `<span class="aug on" title="${A.desc}">⚙ ${A.name}</span>` : `<button class="aug" data-act="augment" data-fid="${f.id}" data-part="${k}" title="${A.desc}" ${S.money < augmentCost(f) ? 'disabled' : ''}>+${A.name} ${fmtMoney(augmentCost(f))}</button>`).join('')}</div>
-            <div class="bar xp"><div style="width:${f.exp / expNeed(f.lv) * 100}%"></div></div>
+            <div class="bar xp" title="등급 경험치 ${Math.floor(gradeExp(f) * 100)}%"><div style="width:${gradeExp(f) * 100}%"></div></div>
+            <div class="small ${atGradeCap(f) ? 'gold' : 'dim'}">${fixerGrade(f)}급 ${Math.floor(gradeExp(f) * 100)}%${f.exam ? '' : atGradeCap(f) ? (f.lv >= 30 ? (f.colorTitle ? '' : ' · 하나 협회의 연락을 기다리는 중') : ' · 사무소 등급 상한') : ''}</div>
+            ${f.exam ? '<div class="gold">승급 심사 중...</div>' : ''}
             <div class="fstats">체력 ${st.maxHp} · 공격 ${st.atk} · 방어 ${st.def} · 공속 ${st.interval}s${st.crit > 0.05 ? ` · 치명 ${Math.round(st.crit * 100)}%` : ''}</div>
             <div class="dim">재능 ${'★'.repeat(Math.round((f.talent - 0.85) * 10 / 1.75) + 1)} · 처치 ${f.kills} · 급여 ${fmtMoney(wageOf(f))}/일</div>
             ${masteryHTML(f, f.weapon ? f.weapon.form : 'fist')}
@@ -775,7 +780,7 @@ const UI = {
     </div>`;
     return `<div class="grid2">
       <div class="card"><h3>재료 구매</h3><p class="dim">공방 레벨이 오르면 더 좋은 재료가 입고됩니다. 구매한 재료는 바로 창고에 들어갑니다.</p>${buy}<hr>${ammoHTML}${matSellHTML()}</div>
-      <div class="card"><h3>장비 판매 <small>${tax ? `트레스 판매세 ${Math.round(tax * 100)}%` : '판매세 면제'}</small></h3><div class="selllist">${sell}</div></div></div>
+      <div class="card"><h3>장비 판매 <small>${tax ? `트레스 판매세 ${Math.round(tax * 100)}%` : '판매세 면제'}</small></h3><div class="selllist">${sell}</div>${remnantSellHTML()}</div></div>
       <div class="grid2" style="margin-top:10px">${patentMax() > 0 || (S.patents || []).length ? patentHTML : ""}${(() => {
         const bound = S.gear.concat(S.fixers.map(f => f.weapon), S.fixers.map(f => f.armor)).filter(g => g && g.owner);
         if (S.wLevel < SING_UNLOCK_W) return "";   // F사 귀속 해제: 공방 Lv4 전에는 숨김
@@ -806,6 +811,16 @@ const UI = {
       </div></div>`;
   },
   tab_workshop() { return workshopTabHTML(); },
+  tab_blackmarket() { return blackMarketTabHTML(); },
+  tab_restore() { return remnantsHTML(); },
+  tab_auction() {
+    const A = S.auctionNext; if (!A) return '<p class="dim">예정된 경매가 없습니다.</p>';
+    const left = A.day - S.day, val = Math.round(A.lot.v * M_);
+    return `<div class="card auctab"><h3>다음 경매 — ${left <= 0 ? '오늘 마감' : left + '일 뒤'} <small class="dim">${A.day}일차 마감</small></h3>
+      <div class="chips">${Object.entries(A.lot.items).map(([id, n]) => matChip(id, n)).join('')}</div>
+      <p>감정가 약 <b>${fmtMoney(val)}</b> · 시작가 ${fmtMoney(Math.round(val * 0.5 / 10000) * 10000)}</p>
+      <p class="dim small">경쟁자가 붙으면 감정가보다 비싸게 낙찰될 수 있습니다. 지금 자금 ${fmtMoney(S.money)}</p></div>`;
+  },
   tab_expedition() { return expeditionTabHTML(); },
   tab_fingers() {
     const kv = S.kRel || 0;
@@ -833,16 +848,21 @@ const UI = {
     return `<div class="grid2">
       <div class="card"><h3>공방 — ${wl.name} (Lv.${W}) <span class="wclass">트레스 ${workshopClass()}급</span></h3>
         <ul class="eff"><li>망치질 성공률 보정 +${(W * 2.5).toFixed(1)}% · 대성공 +${(W * 1.2).toFixed(1)}%</li>
-        <li>최대 단조 ${6 + W}회 · 합성재료 내구 ${2 + Math.ceil(W / 2)}</li>
+        <li>최대 단조 ${6 + W}회 · 합성재료 내구 ${baseHp(W)}</li>
         <li>트레스 등급 ${workshopClass()} · 특허 한도 ${patentMax()}건${W < 5 ? " · 마스터 이상 총기 제작 불가(S급 필요)" : ""}</li>
-        <li>안전 재료 등급 ${W + 1}등급까지 · 시장 재료 ${Math.min(W, 5)}단계</li></ul>
+        <li>안전 재료 등급 ${W + 1}등급까지 · 시장 재료 ${Math.min(W, 5)}단계</li>${workshopRenown(W) ? `<li class="gold">공방의 이름값: 만드는 장비 능력치 +${Math.round(workshopRenown(W) * 100)}%</li>` : ''}</ul>
+        ${wn && workshopRenown(W + 1) > workshopRenown(W) ? `<p class="small good">승급하면 만드는 장비 능력치 +${Math.round(workshopRenown(W + 1) * 100)}%</p>` : ''}
         ${wn ? `<hr><p>다음: <b>${wn.name}</b> (Lv.${W + 1})</p>
         <p>비용 <b class="${S.money < wl.up.money ? 'bad' : 'good'}">${fmtMoney(wl.up.money)}</b> · 필요 명성 <b class="${S.fame < wl.up.fame ? 'bad' : 'good'}">${wl.up.fame}</b>${S.money < wl.up.money || S.fame < wl.up.fame ? ` <small class="bad">— ${[S.money < wl.up.money ? '자금 ' + fmtMoney(wl.up.money - S.money) : '', S.fame < wl.up.fame ? '명성 ' + (wl.up.fame - S.fame) : ''].filter(Boolean).join(' · ')} 부족</small>` : ''}</p>
-        <button class="gold big" data-act="upWorkshop" ${can(wl.up) ? '' : 'disabled'}>공방 승급</button>` : '<p class="gold">최고 등급입니다.</p>'}
+        <button class="gold big" data-act="upWorkshop" ${can(wl.up) ? '' : 'disabled'}>공방 승급</button>` : (S.home ? '<p class="gold">최고 등급입니다.</p>' : S.bloomed ? '<p class="gold"><span class="rbw" data-t="✿ 개화한 공방">✿ 개화한 공방</span></p>'
+          : `<hr><p><b class="rbw" data-t="공방 개화">공방 개화</b> — 공방이 당신의 E.G.O가 된다</p>
+             <p>비용 <b class="${S.money < SHOP_BLOOM.money ? 'bad' : 'good'}">${fmtMoney(SHOP_BLOOM.money)}</b> · 필요 명성 <b class="${S.fame < SHOP_BLOOM.fame ? 'bad' : 'good'}">${SHOP_BLOOM.fame}</b></p>
+             <button class="gold big" data-act="bloomWorkshop" ${S.money >= SHOP_BLOOM.money && S.fame >= SHOP_BLOOM.fame ? '' : 'disabled'}>개화</button>`)}
       </div>
       <div class="card"><h3>사무소 — ${og}급</h3>
         <ul class="eff"><li>정원 ${maxMembers()}명 · 고용 후보 최대 Lv.${1 + (9 - og) * 2}</li>
-        <li>출동 가능: ${zonesAt(og)}</li></ul>
+        <li>출동 가능: ${zonesAt(og)}</li>${officeRenown(og) ? `<li class="gold">사무소의 이름값: 현장 수입·재료 +${Math.round(officeRenown(og) * 100)}%</li>` : ''}</ul>
+        ${ou && officeRenown(og - 1) > officeRenown(og) ? `<p class="small good">승급하면 현장 수입·재료 +${Math.round(officeRenown(og - 1) * 100)}%</p>` : ''}
         ${ou ? `<hr><p>다음: <b>${og - 1}급</b></p>
         <p>비용 <b class="${S.money < ou.money ? 'bad' : 'good'}">${fmtMoney(ou.money)}</b> · 필요 명성 <b class="${S.fame < ou.fame ? 'bad' : 'good'}">${ou.fame}</b>${S.money < ou.money || S.fame < ou.fame ? ` <small class="bad">— ${[S.money < ou.money ? '자금 ' + fmtMoney(ou.money - S.money) : '', S.fame < ou.fame ? '명성 ' + (ou.fame - S.fame) : ''].filter(Boolean).join(' · ')} 부족</small>` : ''}</p>
         ${ZONES.find(z => z.req === og - 1) ? `<p class="good">새 지역 개방: ${ZONES.find(z => z.req === og - 1).name}</p>` : ''}
